@@ -3,7 +3,6 @@ use std::{error::Error, fs, path::PathBuf};
 use cursive::{
 	theme::{self, Palette, Theme},
 	traits::*,
-	views::Dialog,
 };
 use cursive_table_view::{TableView, TableViewItem};
 use log::*;
@@ -78,7 +77,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 		table.insert_item(Row(record));
 	}
 
-	siv.add_layer(Dialog::around(table).title("stdin").full_screen());
+	// add_fullscreen_layer removes shadow
+	// full_screen() makes table view as large as possible
+	siv.add_fullscreen_layer(table.full_screen());
 
 	siv.run();
 
