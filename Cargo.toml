@@ -10,6 +10,6 @@ edition = "2018"
 [dependencies]
 structopt = "0.3"
 csv = "1.1"
-cursive = "0.16.0"
+cursive = "0.20.0"
 log = "0.4.13"
-cursive_table_view = "0.13.0"
+cursive_table_view = "0.14.0"
