@@ -4,7 +4,9 @@ use std::{
 	collections::HashMap,
 	convert::TryInto,
 	error::Error,
-	io, panic,
+	io, mem,
+	ops::{Index, IndexMut},
+	panic,
 	path::{Path, PathBuf},
 };
 
@@ -22,9 +24,9 @@ extern crate log;
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
-	layout::Constraint,
+	layout::{Constraint, Margin},
 	style::{Modifier, Style},
-	widgets::{Block, Borders, Cell, Row, Table},
+	widgets::{Block, Borders, Cell, Clear, Paragraph, Row, StatefulWidget, Table, Widget},
 	Terminal,
 };
 
@@ -40,9 +42,187 @@ struct XY<T> {
 	y: T,
 }
 
+struct Program {
+	state: State,
+	grid: Grid,
+	filename: PathBuf,
+	selection: XY<usize>,
+	bindings: Bindings,
+	should_redraw: bool,
+	edit_buffer: String,
+}
+
+impl Program {
+	fn from_path(filename: impl AsRef<Path>) -> io::Result<Self> {
+		let filename = filename.as_ref().to_path_buf();
+		let rdr = csv::ReaderBuilder::new()
+			.has_headers(false)
+			.from_path(&filename)?;
+
+		let grid = Grid::from_csv(rdr)?;
+
+		let selection = XY { x: 0, y: 0 };
+
+		Ok(Self {
+			grid,
+			filename,
+			state: State::Normal,
+			bindings: Bindings::default(),
+			should_redraw: true,
+			edit_buffer: String::new(),
+			selection,
+		})
+	}
+
+	fn assert_selection_valid(&self) {
+		let sel = self.selection;
+		let size = self.grid.size;
+		assert!(
+			sel.x < size.x && sel.y < size.y,
+			"Selection {sel:?} out of bounds {size:?}"
+		);
+	}
+
+	fn handle_move(&mut self, m: Direction) {
+		self.assert_selection_valid();
+		use Direction::*;
+		let XY { x, y } = self.selection;
+		let size = self.grid.size;
+		let s = match m {
+			Up if y > 0 => XY { x, y: y - 1 },
+			Down if y < size.y - 1 => XY { x, y: y + 1 },
+			Left if x > 0 => XY { x: x - 1, y },
+			Right if x < size.x - 1 => XY { x: x + 1, y },
+			_ => return,
+		};
+		self.selection = s;
+		self.assert_selection_valid();
+	}
+
+	fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
+		let action = match self.state {
+			State::Normal => self.handle_input_normal(i)?,
+			State::EditCell => self.handle_input_edit(i)?,
+		};
+		self.should_redraw = true;
+		Ok(action)
+	}
+
+	fn handle_input_edit(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
+		match i.0 {
+			KeyCode::Char(c) => {
+				self.edit_buffer.push(c);
+			}
+			KeyCode::Backspace => {
+				self.edit_buffer.pop();
+			}
+			// Cancel
+			KeyCode::Esc => {
+				self.edit_buffer = String::new();
+				self.state = State::Normal;
+			}
+			// Submit
+			KeyCode::Enter => {
+				self.grid[self.selection] = mem::take(&mut self.edit_buffer);
+				self.state = State::Normal;
+			}
+			_ => {
+				debug!("Unhandled edit input: {i:?}");
+			}
+		};
+
+		Ok(None)
+	}
+
+	fn handle_input_normal(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
+		let Some(action) = self.bindings.get(i) else {
+			debug!("Unhandled input: {i:?}");
+			return Ok(None);
+		};
+
+		use Action::*;
+		match action {
+			Quit => return Ok(Some(ExternalAction::Quit)),
+			Write => {
+				let mut wtr = csv::Writer::from_path(&self.filename)?;
+				self.grid.to_csv(&mut wtr)?;
+			}
+			Move(d) => self.handle_move(d),
+			Edit => {
+				self.edit_buffer = self.grid[self.selection].clone();
+				self.state = State::EditCell;
+			}
+			Replace => {
+				self.edit_buffer = String::new();
+				self.state = State::EditCell;
+			}
+		}
+
+		Ok(None)
+	}
+
+	fn draw(&mut self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
+		t.draw(|f| {
+			let size = f.size();
+			let block = Block::default()
+				.title(self.filename.to_str().unwrap_or_default())
+				.borders(Borders::ALL);
+			let inner = block.inner(size);
+			f.render_widget(block, size);
+			let mut state = GridState {
+				selection: self.selection,
+			};
+			f.render_stateful_widget(&self.grid, inner, &mut state);
+
+			use State::*;
+			match &self.state {
+				Normal => {}
+				EditCell => {
+					// draw edit popup
+					let margins = Margin {
+						horizontal: 8,
+						vertical: 10,
+					};
+					let size = size.inner(&margins);
+					let border = Block::default()
+						.title(format!("{:?}", self.selection))
+						.borders(Borders::ALL);
+					let inner = border.inner(size);
+					f.render_widget(Clear, size);
+					f.render_widget(border, size);
+					let text = Paragraph::new(self.edit_buffer.clone());
+					f.render_widget(text, inner);
+				}
+			}
+		})?;
+		self.should_redraw = false;
+		Ok(())
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+enum State {
+	/// Moving around the sheet
+	Normal,
+	/// Currently editing a cell
+	EditCell,
+}
+
+enum ExternalAction {
+	Quit,
+}
+
 #[derive(Debug, Copy, Clone)]
 enum Action {
+	/// Move the cursor
 	Move(Direction),
+	/// Edit the current cell
+	Edit,
+	/// Replace the current cell
+	Replace,
+	/// Write state to original file
+	Write,
+	/// Quit the program
 	Quit,
 }
 
@@ -73,6 +253,9 @@ impl Default for Bindings {
 		m.insert(Input(Left, none), Move(Direction::Left));
 		m.insert(Input(Right, none), Move(Direction::Right));
 		m.insert(Input(Char('q'), none), Quit);
+		m.insert(Input(Char('w'), none), Write);
+		m.insert(Input(F(2), none), Edit);
+		m.insert(Input(Enter, none), Replace);
 
 		Self(m)
 	}
@@ -86,20 +269,27 @@ impl Bindings {
 }
 
 struct Grid {
-	filename: PathBuf,
 	cells: Vec<Vec<String>>,
 	/// Dimensions of cells
 	size: XY<usize>,
-	selection: XY<usize>,
+}
+
+impl Index<XY<usize>> for Grid {
+	type Output = String;
+
+	fn index(&self, index: XY<usize>) -> &Self::Output {
+		&self.cells[index.y][index.x]
+	}
+}
+
+impl IndexMut<XY<usize>> for Grid {
+	fn index_mut(&mut self, index: XY<usize>) -> &mut Self::Output {
+		&mut self.cells[index.y][index.x]
+	}
 }
 
 impl Grid {
-	fn from_path(filename: impl AsRef<Path>) -> io::Result<Self> {
-		let filename = filename.as_ref().to_path_buf();
-		let mut rdr = csv::ReaderBuilder::new()
-			.has_headers(false)
-			.from_path(&filename)?;
-
+	fn from_csv<R: io::Read>(mut rdr: csv::Reader<R>) -> io::Result<Self> {
 		let records: Vec<_> = rdr.records().collect::<Result<_, _>>()?;
 
 		let cells: Vec<Vec<_>> = records
@@ -114,22 +304,35 @@ impl Grid {
 			y: height,
 		};
 
-		let selection = XY { x: 0, y: 0 };
-
-		Ok(Self {
-			filename,
-			cells,
-			size,
-			selection,
-		})
+		Ok(Self { cells, size })
 	}
 
-	fn draw(&self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
+	fn to_csv<W: io::Write>(&self, wtr: &mut csv::Writer<W>) -> io::Result<()> {
+		for row in &self.cells {
+			wtr.write_record(row)?;
+		}
+		Ok(())
+	}
+}
+
+struct GridState {
+	selection: XY<usize>,
+}
+
+impl StatefulWidget for &Grid {
+	type State = GridState;
+
+	fn render(
+		self,
+		area: tui::layout::Rect,
+		buf: &mut tui::buffer::Buffer,
+		state: &mut Self::State,
+	) {
 		let table = Table::new(self.cells.iter().enumerate().map(|(y, row)| {
 			let row = row.clone();
-			if y == self.selection.y {
+			if y == state.selection.y {
 				let mut row: Vec<_> = row.into_iter().map(Cell::from).collect();
-				row[self.selection.x] = row[self.selection.x]
+				row[state.selection.x] = row[state.selection.x]
 					.clone()
 					.style(Style::default().add_modifier(Modifier::BOLD));
 				Row::new(row)
@@ -157,40 +360,7 @@ impl Grid {
 
 		let table = table.widths(&constraints);
 
-		t.draw(|f| {
-			let size = f.size();
-			let block = Block::default()
-				.title(self.filename.to_str().unwrap_or_default())
-				.borders(Borders::ALL);
-			let inner = block.inner(size);
-			f.render_widget(block, size);
-			f.render_widget(table, inner);
-		})?;
-		Ok(())
-	}
-
-	fn assert_selection_valid(&self) {
-		let sel = self.selection;
-		let size = self.size;
-		assert!(
-			sel.x < size.x && sel.y < size.y,
-			"Selection {sel:?} out of bounds {size:?}"
-		);
-	}
-
-	fn handle_move(&mut self, m: Direction) {
-		self.assert_selection_valid();
-		use Direction::*;
-		let XY { x, y } = self.selection;
-		let s = match m {
-			Up if self.selection.y > 0 => XY { x, y: y - 1 },
-			Down if self.selection.y < self.size.y - 1 => XY { x, y: y + 1 },
-			Left if self.selection.x > 0 => XY { x: x - 1, y },
-			Right if self.selection.x < self.size.x - 1 => XY { x: x + 1, y },
-			_ => return,
-		};
-		self.selection = s;
-		self.assert_selection_valid();
+		Widget::render(table, area, buf);
 	}
 }
 
@@ -229,9 +399,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 	let opt = Opt::from_args();
 
 	info!("Hello, world!");
-	let mut grid = Grid::from_path(opt.file)?;
-	let bindings = Bindings::default();
-
 	let mut terminal = setup_terminal()?;
 
 	// reset terminal on panic
@@ -244,13 +411,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 		default_panic(info);
 	}));
 
-	grid.draw(&mut terminal)?;
+	let mut program = Program::from_path(opt.file)?;
+
+	program.draw(&mut terminal)?;
 
 	loop {
 		let k = match event::read()? {
 			Event::Key(k) => k,
 			Event::Resize(..) => {
-				grid.draw(&mut terminal)?;
+				program.draw(&mut terminal)?;
 				continue;
 			}
 			e => {
@@ -259,17 +428,15 @@ fn main() -> Result<(), Box<dyn Error>> {
 			}
 		};
 
-		let Some(action) = bindings.get(k) else {
-			debug!("Unhandled key: {k:?}");
-			continue;
-		};
-
-		use Action::*;
-		match action {
-			Move(d) => grid.handle_move(d),
-			Quit => break,
+		if let Some(action) = program.handle_input(k.into())? {
+			match action {
+				ExternalAction::Quit => break,
+			}
 		}
-		grid.draw(&mut terminal)?;
+
+		if program.should_redraw {
+			program.draw(&mut terminal)?;
+		}
 	}
 
 	teardown_terminal()?;
