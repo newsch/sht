@@ -170,9 +170,11 @@ impl Grid {
 	}
 
 	fn assert_selection_valid(&self) {
+		let sel = self.selection;
+		let size = self.size;
 		assert!(
-			self.selection.x < self.size.x && self.selection.y < self.size.y,
-			"Selection {self.selection:?} out of bounds {self.size:?}"
+			sel.x < size.x && sel.y < size.y,
+			"Selection {sel:?} out of bounds {size:?}"
 		);
 	}
 
