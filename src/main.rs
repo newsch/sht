@@ -1,19 +1,24 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
 use std::{
 	cmp::max,
+	collections::HashMap,
 	convert::TryInto,
-	error::Error, io, panic,
+	error::Error,
+	io, panic,
 	path::{Path, PathBuf},
 };
 
 use crossterm::{
 	cursor,
-	event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
+	event::{
+		self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+	},
 	execute,
 	terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use log::*;
+#[macro_use]
+extern crate log;
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
@@ -29,21 +34,68 @@ struct Opt {
 	file: PathBuf,
 }
 
+#[derive(Debug, Copy, Clone)]
 struct XY<T> {
 	x: T,
 	y: T,
 }
 
+#[derive(Debug, Copy, Clone)]
+enum Action {
+	Move(Direction),
+	Quit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
+struct Input(KeyCode, KeyModifiers);
+
+impl From<KeyEvent> for Input {
+	fn from(
+		KeyEvent {
+			code, modifiers, ..
+		}: KeyEvent,
+	) -> Self {
+		Self(code, modifiers)
+	}
+}
+
+struct Bindings(HashMap<Input, Action>);
+
+impl Default for Bindings {
+	fn default() -> Self {
+		use Action::*;
+		use KeyCode::*;
+		let none = KeyModifiers::empty();
+
+		let mut m = HashMap::new();
+		m.insert(Input(Up, none), Move(Direction::Up));
+		m.insert(Input(Down, none), Move(Direction::Down));
+		m.insert(Input(Left, none), Move(Direction::Left));
+		m.insert(Input(Right, none), Move(Direction::Right));
+		m.insert(Input(Char('q'), none), Quit);
+
+		Self(m)
+	}
+}
+
+impl Bindings {
+	fn get(&self, k: impl Into<Input>) -> Option<Action> {
+		let k = k.into();
+		self.0.get(&k).map(|v| *v)
+	}
+}
+
 struct Grid {
 	filename: PathBuf,
 	cells: Vec<Vec<String>>,
+	/// Dimensions of cells
 	size: XY<usize>,
 	selection: XY<usize>,
 }
 
 impl Grid {
 	fn from_path(filename: impl AsRef<Path>) -> io::Result<Self> {
-		let filename = filename.as_ref().to_owned();
+		let filename = filename.as_ref().to_path_buf();
 		let mut rdr = csv::ReaderBuilder::new()
 			.has_headers(false)
 			.from_path(&filename)?;
@@ -117,8 +169,16 @@ impl Grid {
 		Ok(())
 	}
 
-	fn handle_move(&mut self, m: Movement) {
-		use Movement::*;
+	fn assert_selection_valid(&self) {
+		assert!(
+			self.selection.x < self.size.x && self.selection.y < self.size.y,
+			"Selection {self.selection:?} out of bounds {self.size:?}"
+		);
+	}
+
+	fn handle_move(&mut self, m: Direction) {
+		self.assert_selection_valid();
+		use Direction::*;
 		let XY { x, y } = self.selection;
 		let s = match m {
 			Up if self.selection.y > 0 => XY { x, y: y - 1 },
@@ -128,6 +188,7 @@ impl Grid {
 			_ => return,
 		};
 		self.selection = s;
+		self.assert_selection_valid();
 	}
 }
 
@@ -152,7 +213,8 @@ fn teardown_terminal() -> io::Result<()> {
 	Ok(())
 }
 
-enum Movement {
+#[derive(Debug, Copy, Clone)]
+enum Direction {
 	Up,
 	Right,
 	Down,
@@ -166,6 +228,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 	info!("Hello, world!");
 	let mut grid = Grid::from_path(opt.file)?;
+	let bindings = Bindings::default();
 
 	let mut terminal = setup_terminal()?;
 
@@ -182,28 +245,27 @@ fn main() -> Result<(), Box<dyn Error>> {
 	grid.draw(&mut terminal)?;
 
 	loop {
-		match event::read()? {
-			Event::Key(KeyEvent {
-				code: KeyCode::Char('q'),
-				..
-			}) => break,
-			Event::Key(KeyEvent {
-				code: KeyCode::Left,
-				..
-			}) => grid.handle_move(Movement::Left),
-			Event::Key(KeyEvent {
-				code: KeyCode::Right,
-				..
-			}) => grid.handle_move(Movement::Right),
-			Event::Key(KeyEvent {
-				code: KeyCode::Up, ..
-			}) => grid.handle_move(Movement::Up),
-			Event::Key(KeyEvent {
-				code: KeyCode::Down,
-				..
-			}) => grid.handle_move(Movement::Down),
-			Event::Resize(..) => {}
-			_ => continue,
+		let k = match event::read()? {
+			Event::Key(k) => k,
+			Event::Resize(..) => {
+				grid.draw(&mut terminal)?;
+				continue;
+			}
+			e => {
+				debug!("Unhandled event: {e:?}");
+				continue;
+			}
+		};
+
+		let Some(action) = bindings.get(k) else {
+			debug!("Unhandled key: {k:?}");
+			continue;
+		};
+
+		use Action::*;
+		match action {
+			Move(d) => grid.handle_move(d),
+			Quit => break,
 		}
 		grid.draw(&mut terminal)?;
 	}
