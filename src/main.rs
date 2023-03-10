@@ -5,9 +5,10 @@ use std::{
 	convert::TryInto,
 	error::Error,
 	io, mem,
-	ops::{Index, IndexMut},
+	ops::{ControlFlow, Index, IndexMut},
 	panic,
 	path::{Path, PathBuf},
+	str::FromStr,
 };
 
 use crossterm::{
@@ -24,7 +25,7 @@ extern crate log;
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
-	layout::{Constraint, Margin},
+	layout::{Constraint, Margin, Rect},
 	style::{Modifier, Style},
 	widgets::{Block, Borders, Cell, Clear, Paragraph, Row, StatefulWidget, Table, Widget},
 	Terminal,
@@ -49,7 +50,6 @@ struct Program {
 	selection: XY<usize>,
 	bindings: Bindings,
 	should_redraw: bool,
-	edit_buffer: String,
 }
 
 impl Program {
@@ -69,7 +69,6 @@ impl Program {
 			state: State::Normal,
 			bindings: Bindings::default(),
 			should_redraw: true,
-			edit_buffer: String::new(),
 			selection,
 		})
 	}
@@ -100,38 +99,21 @@ impl Program {
 	}
 
 	fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
-		let action = match self.state {
+		let action = match &mut self.state {
 			State::Normal => self.handle_input_normal(i)?,
-			State::EditCell => self.handle_input_edit(i)?,
+			State::EditCell(state) => {
+				if let ControlFlow::Break(o) = state.handle_input(i) {
+					if let Some(new_contents) = o {
+						self.grid[self.selection] = new_contents;
+					}
+					self.state = State::Normal;
+				}
+				None
+			}
 		};
+		// TODO: fix this
 		self.should_redraw = true;
 		Ok(action)
-	}
-
-	fn handle_input_edit(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
-		match i.0 {
-			KeyCode::Char(c) => {
-				self.edit_buffer.push(c);
-			}
-			KeyCode::Backspace => {
-				self.edit_buffer.pop();
-			}
-			// Cancel
-			KeyCode::Esc => {
-				self.edit_buffer = String::new();
-				self.state = State::Normal;
-			}
-			// Submit
-			KeyCode::Enter => {
-				self.grid[self.selection] = mem::take(&mut self.edit_buffer);
-				self.state = State::Normal;
-			}
-			_ => {
-				debug!("Unhandled edit input: {i:?}");
-			}
-		};
-
-		Ok(None)
 	}
 
 	fn handle_input_normal(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
@@ -149,12 +131,10 @@ impl Program {
 			}
 			Move(d) => self.handle_move(d),
 			Edit => {
-				self.edit_buffer = self.grid[self.selection].clone();
-				self.state = State::EditCell;
+				self.state = State::EditCell(CellEditor::from_str(&self.grid[self.selection]));
 			}
 			Replace => {
-				self.edit_buffer = String::new();
-				self.state = State::EditCell;
+				self.state = State::EditCell(CellEditor::from_str(""));
 			}
 		}
 
@@ -162,6 +142,7 @@ impl Program {
 	}
 
 	fn draw(&mut self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
+		let mut cursor_pos = None;
 		t.draw(|f| {
 			let size = f.size();
 			let block = Block::default()
@@ -177,7 +158,7 @@ impl Program {
 			use State::*;
 			match &self.state {
 				Normal => {}
-				EditCell => {
+				EditCell(editor) => {
 					// draw edit popup
 					let margins = Margin {
 						horizontal: 8,
@@ -190,22 +171,160 @@ impl Program {
 					let inner = border.inner(size);
 					f.render_widget(Clear, size);
 					f.render_widget(border, size);
-					let text = Paragraph::new(self.edit_buffer.clone());
-					f.render_widget(text, inner);
+					f.render_widget(editor, inner);
+					cursor_pos = Some(editor.cursor(inner));
 				}
 			}
 		})?;
+
+		if let Some(XY { x, y }) = cursor_pos {
+			t.set_cursor(x, y)?;
+			t.show_cursor()?;
+		} else {
+			t.hide_cursor()?;
+		}
+
 		self.should_redraw = false;
 		Ok(())
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum State {
 	/// Moving around the sheet
 	Normal,
-	/// Currently editing a cell
-	EditCell,
+	/// Currently editing the selected cell
+	EditCell(CellEditor),
+}
+
+// TODO: use grapheme clusters instead...
+#[derive(Debug, Clone)]
+struct CellEditor {
+	buffer: Vec<char>,
+	/// [0, buffer.len()]
+	cursor: usize,
+}
+
+impl CellEditor {
+	fn from_str(s: &str) -> Self {
+		let buffer: Vec<_> = s.chars().collect();
+		Self {
+			cursor: buffer.len(),
+			buffer,
+		}
+	}
+
+	/// Iterator of current chars
+	fn iter(&self) -> impl Iterator<Item = &char> {
+		self.buffer.iter()
+	}
+
+	/// Remove the character right of the cursor.
+	fn pop_char_right(&mut self) {
+		if self.cursor >= self.buffer.len() {
+			return;
+		}
+		self.buffer.remove(self.cursor);
+	}
+
+	/// Remove the character left of the cursor.
+	fn pop_char_left(&mut self) {
+		if self.cursor <= 0 {
+			return;
+		}
+		self.buffer.remove(self.cursor - 1);
+		self.cursor -= 1;
+	}
+
+	/// Insert a character at the current position.
+	fn insert_char(&mut self, c: char) {
+		self.buffer.insert(self.cursor, c);
+		self.cursor += 1;
+	}
+
+	fn move_left(&mut self) {
+		if self.cursor <= 0 {
+			return;
+		}
+		self.cursor -= 1;
+	}
+
+	fn move_right(&mut self) {
+		if self.cursor >= self.buffer.len() {
+			return;
+		}
+		self.cursor += 1;
+	}
+
+	fn move_beginning(&mut self) {
+		self.cursor = 0;
+	}
+
+	fn move_end(&mut self) {
+		self.cursor = self.buffer.len();
+	}
+
+	/// Remove the contents as a string
+	fn take(&mut self) -> String {
+		mem::take(&mut self.buffer).into_iter().collect()
+	}
+}
+
+impl Widget for &CellEditor {
+	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer) {
+		// TODO: handle overflow w/ ellipses
+		let y = area.y;
+		for (i, c) in self.iter().enumerate() {
+			if i >= area.width as usize {
+				break;
+			}
+
+			let x = area.x + i as u16;
+			let cell = buf.get_mut(x, y);
+			cell.symbol = String::from(*c);
+		}
+	}
+}
+
+impl CellEditor {
+	fn cursor(&self, area: Rect) -> XY<u16> {
+		XY {
+			x: area.x + self.cursor as u16,
+			y: area.y,
+		}
+	}
+}
+
+impl Dialog for &mut CellEditor {
+	type Output = Option<String>;
+
+	fn handle_input(self, key: Input) -> ControlFlow<Self::Output> {
+		use ControlFlow::*;
+
+		use KeyCode::*;
+		match key {
+			Input(Esc, ..) => return Break(None),
+			Input(Enter, ..) => return Break(Some(self.take())),
+			Input(Backspace, ..) => self.pop_char_left(),
+			Input(Delete, ..) => self.pop_char_right(),
+			Input(Left, ..) => self.move_left(),
+			Input(Right, ..) => self.move_right(),
+			Input(Home, ..) => self.move_beginning(),
+			Input(End, ..) => self.move_end(),
+			Input(Char(c), ..) => self.insert_char(c),
+			_ => debug!("Unhandled CellEditor input: {key:?}"),
+		}
+
+		return Continue(());
+	}
+}
+
+/// Temporary interactive widget that takes control of input.
+trait Dialog {
+	type Output;
+
+	/// called until it returns Some(Output)
+	fn handle_input(self, key: Input) -> ControlFlow<Self::Output>;
 }
 
 enum ExternalAction {
@@ -224,6 +343,7 @@ enum Action {
 	Write,
 	/// Quit the program
 	Quit,
+	ToggleDebug,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
@@ -256,6 +376,7 @@ impl Default for Bindings {
 		m.insert(Input(Char('w'), none), Write);
 		m.insert(Input(F(2), none), Edit);
 		m.insert(Input(Enter, none), Replace);
+		m.insert(Input(F(12), none), ToggleDebug);
 
 		Self(m)
 	}
