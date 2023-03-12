@@ -20,8 +20,9 @@ extern crate log;
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
-	layout::Margin,
-	widgets::{Block, Borders, Clear},
+	layout::{self, Constraint, Layout, Margin, Rect},
+	style::{Modifier, Style},
+	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
 use views::{Dialog, EditState, EditView};
@@ -50,6 +51,7 @@ struct Program {
 	selection: XY<usize>,
 	bindings: Bindings,
 	should_redraw: bool,
+	status: String,
 }
 
 impl Program {
@@ -70,6 +72,7 @@ impl Program {
 			bindings: Bindings::default(),
 			should_redraw: true,
 			selection,
+			status: String::new(),
 		})
 	}
 
@@ -154,7 +157,31 @@ impl Program {
 	fn draw(&mut self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
 		let mut cursor_pos = None;
 		t.draw(|f| {
-			let size = f.size();
+			let [main, info]: [Rect; 2] = Layout::default()
+				.direction(layout::Direction::Vertical)
+				.constraints(vec![Constraint::Min(1), Constraint::Length(1)])
+				.split(f.size())
+				.try_into()
+				.unwrap();
+
+			// status bar
+			{
+				let style = Style::default().add_modifier(Modifier::REVERSED);
+				let pos_msg = format!("{},{}", self.selection.x + 1, self.selection.y + 1);
+
+				let [status, pos]: [Rect; 2] = Layout::default()
+					.direction(layout::Direction::Horizontal)
+					.constraints([Constraint::Min(0), Constraint::Length(pos_msg.len() as u16)])
+					.split(info)
+					.try_into()
+					.unwrap();
+				f.render_widget(Paragraph::new(self.status.as_str()).style(style), status);
+				f.render_widget(Paragraph::new(pos_msg).style(style), pos);
+			}
+
+			let size = main;
+
+			// sheet
 			let block = Block::default()
 				.title(self.filename.to_str().unwrap_or_default())
 				.borders(Borders::ALL);
