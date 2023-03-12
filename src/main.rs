@@ -22,7 +22,6 @@ use tui::{
 	backend::{Backend, CrosstermBackend},
 	layout::{self, Constraint, Layout, Margin, Rect},
 	style::{Modifier, Style},
-	text::Spans,
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
@@ -190,7 +189,7 @@ impl Program {
 			f.render_widget(block, size);
 			let mut state = GridState::default();
 			state.select(self.selection);
-			f.render_stateful_widget(GridView::new(&self.grid, self.selection), inner, &mut state);
+			f.render_stateful_widget(GridView::new(&self.grid), inner, &mut state);
 
 			use State::*;
 			match &mut self.state {

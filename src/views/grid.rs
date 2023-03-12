@@ -3,13 +3,12 @@ use std::cmp::max;
 use tui::{
 	buffer::Buffer,
 	layout::{Constraint, Rect},
-	style::{Modifier, Style},
 	widgets::{StatefulWidget, Widget},
 };
 
 use crate::{Grid, XY};
 
-use super::{Row, Table, TableState};
+use super::{Table, TableState};
 
 #[derive(Default)]
 pub struct GridState(TableState);
@@ -22,12 +21,11 @@ impl GridState {
 
 pub struct GridView<'g> {
 	grid: &'g Grid,
-	selection: XY<usize>,
 }
 
 impl<'g> GridView<'g> {
-	pub fn new(grid: &'g Grid, selection: XY<usize>) -> Self {
-		Self { grid, selection }
+	pub fn new(grid: &'g Grid) -> Self {
+		Self { grid }
 	}
 }
 
@@ -35,10 +33,7 @@ impl<'g> StatefulWidget for GridView<'g> {
 	type State = GridState;
 
 	fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-		let table = Table::new(self.grid.cells.iter().map(|row| {
-			let row = row.clone();
-			Row::new(row)
-		}));
+		let table = Table::new(&self.grid.cells);
 		// use longest width
 		let constraints = self
 			.grid
