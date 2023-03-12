@@ -1,10 +1,7 @@
 use std::{mem, ops::ControlFlow};
 
 use crossterm::event::KeyCode;
-use tui::{
-	layout::Rect,
-	widgets::{StatefulWidget},
-};
+use tui::{layout::Rect, widgets::StatefulWidget};
 
 use crate::{Input, XY};
 

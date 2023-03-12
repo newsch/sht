@@ -1,9 +1,11 @@
-mod edit;
 use std::ops::ControlFlow;
 
+mod edit;
 pub use edit::*;
 mod debug;
 pub use debug::*;
+mod grid;
+pub use grid::*;
 
 use crate::Input;
 

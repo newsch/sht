@@ -1,8 +1,6 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
 use std::{
-	cmp::max,
 	collections::HashMap,
-	convert::TryInto,
 	error::Error,
 	io,
 	ops::{ControlFlow, Index, IndexMut},
@@ -22,14 +20,13 @@ extern crate log;
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
-	layout::{Constraint, Margin},
-	style::{Modifier, Style},
-	widgets::{Block, Borders, Cell, Clear, Row, StatefulWidget, Table, Widget},
+	layout::Margin,
+	widgets::{Block, Borders, Clear},
 	Terminal,
 };
 use views::{Dialog, EditState, EditView};
 
-use crate::views::DebugView;
+use crate::views::{DebugView, GridView};
 
 mod logger;
 mod views;
@@ -163,10 +160,7 @@ impl Program {
 				.borders(Borders::ALL);
 			let inner = block.inner(size);
 			f.render_widget(block, size);
-			let mut state = GridState {
-				selection: self.selection,
-			};
-			f.render_stateful_widget(&self.grid, inner, &mut state);
+			f.render_widget(GridView::new(&self.grid, self.selection), inner);
 
 			use State::*;
 			match &mut self.state {
@@ -280,7 +274,7 @@ impl Bindings {
 	}
 }
 
-struct Grid {
+pub struct Grid {
 	cells: Vec<Vec<String>>,
 	/// Dimensions of cells
 	size: XY<usize>,
@@ -324,55 +318,6 @@ impl Grid {
 			wtr.write_record(row)?;
 		}
 		Ok(())
-	}
-}
-
-struct GridState {
-	selection: XY<usize>,
-}
-
-impl StatefulWidget for &Grid {
-	type State = GridState;
-
-	fn render(
-		self,
-		area: tui::layout::Rect,
-		buf: &mut tui::buffer::Buffer,
-		state: &mut Self::State,
-	) {
-		let table = Table::new(self.cells.iter().enumerate().map(|(y, row)| {
-			let row = row.clone();
-			if y == state.selection.y {
-				let mut row: Vec<_> = row.into_iter().map(Cell::from).collect();
-				row[state.selection.x] = row[state.selection.x]
-					.clone()
-					.style(Style::default().add_modifier(Modifier::BOLD));
-				Row::new(row)
-			} else {
-				Row::new(row)
-			}
-		}));
-		// highlight selected
-
-		// use longest width
-		let constraints = self
-			.cells
-			.iter()
-			.fold(vec![0; self.cells.len()], |mut len, row| {
-				for (i, cell) in row.iter().enumerate() {
-					len[i] = max(len[i], cell.len());
-				}
-				len
-			})
-			.into_iter()
-			.map(|l| l.try_into().expect("assume cell width less that u16 max"))
-			.map(|l| max(l, 16))
-			.map(Constraint::Length)
-			.collect::<Vec<_>>();
-
-		let table = table.widths(&constraints);
-
-		Widget::render(table, area, buf);
 	}
 }
 
