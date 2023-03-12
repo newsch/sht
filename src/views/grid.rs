@@ -2,7 +2,7 @@ use std::cmp::max;
 
 use tui::{
 	buffer::Buffer,
-	layout::{Constraint, Rect},
+	layout::{Rect},
 	widgets::{StatefulWidget, Widget},
 };
 
@@ -35,11 +35,12 @@ impl<'g> StatefulWidget for GridView<'g> {
 	fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
 		let table = Table::new(&self.grid.cells);
 		// use longest width
+		let width = self.grid.cells.first().map(|r| r.len()).unwrap_or_default();
 		let constraints = self
 			.grid
 			.cells
 			.iter()
-			.fold(vec![0; self.grid.cells.len()], |mut len, row| {
+			.fold(vec![0; width], |mut len, row| {
 				for (i, cell) in row.iter().enumerate() {
 					len[i] = max(len[i], cell.len());
 				}
@@ -48,7 +49,6 @@ impl<'g> StatefulWidget for GridView<'g> {
 			.into_iter()
 			.map(|l| l.try_into().expect("assume cell width less that u16 max"))
 			.map(|l| max(l, 16))
-			.map(Constraint::Length)
 			.collect::<Vec<_>>();
 
 		let table = table.widths(&constraints);
