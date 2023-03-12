@@ -3,10 +3,12 @@ use std::cmp::max;
 use tui::{
 	layout::Constraint,
 	style::{Modifier, Style},
-	widgets::{Cell, Row, Table, Widget},
+	widgets::Widget,
 };
 
 use crate::{Grid, XY};
+
+use super::{Cell, Row, Table};
 
 pub struct GridView<'g> {
 	grid: &'g Grid,

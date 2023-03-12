@@ -6,6 +6,8 @@ mod debug;
 pub use debug::*;
 mod grid;
 pub use grid::*;
+mod table;
+use table::*;
 
 use crate::Input;
 

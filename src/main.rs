@@ -22,6 +22,7 @@ use tui::{
 	backend::{Backend, CrosstermBackend},
 	layout::{self, Constraint, Layout, Margin, Rect},
 	style::{Modifier, Style},
+	text::Spans,
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
