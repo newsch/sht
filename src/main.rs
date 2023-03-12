@@ -12,9 +12,7 @@ use std::{
 
 use crossterm::{
 	cursor,
-	event::{
-		self, Event, KeyCode, KeyEvent, KeyModifiers,
-	},
+	event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
 	execute,
 	terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -26,12 +24,10 @@ use tui::{
 	backend::{Backend, CrosstermBackend},
 	layout::{Constraint, Margin},
 	style::{Modifier, Style},
-	widgets::{
-		Block, Borders, Cell, Clear, Row, StatefulWidget, Table, Widget,
-	},
+	widgets::{Block, Borders, Cell, Clear, Row, StatefulWidget, Table, Widget},
 	Terminal,
 };
-use views::{CellEditor, Dialog};
+use views::{Dialog, EditState, EditView};
 
 use crate::views::DebugView;
 
@@ -142,10 +138,10 @@ impl Program {
 			}
 			Move(d) => self.handle_move(d),
 			Edit => {
-				self.state = State::EditCell(CellEditor::from_str(&self.grid[self.selection]));
+				self.state = State::EditCell(EditState::from_str(&self.grid[self.selection]));
 			}
 			Replace => {
-				self.state = State::EditCell(CellEditor::from_str(""));
+				self.state = State::EditCell(EditState::from_str(""));
 			}
 			ToggleDebug => {
 				self.state = match self.state {
@@ -173,7 +169,7 @@ impl Program {
 			f.render_stateful_widget(&self.grid, inner, &mut state);
 
 			use State::*;
-			match &self.state {
+			match &mut self.state {
 				Normal => {}
 				EditCell(editor) => {
 					// draw edit popup
@@ -188,7 +184,7 @@ impl Program {
 					let inner = border.inner(size);
 					f.render_widget(Clear, size);
 					f.render_widget(border, size);
-					f.render_widget(editor, inner);
+					f.render_stateful_widget(EditView::default(), inner, editor);
 					cursor_pos = Some(editor.cursor(inner));
 				}
 				Debug => {
@@ -218,7 +214,7 @@ enum State {
 	/// Moving around the sheet
 	Normal,
 	/// Currently editing the selected cell
-	EditCell(CellEditor),
+	EditCell(EditState),
 	Debug,
 }
 

@@ -1,21 +1,27 @@
 use std::{mem, ops::ControlFlow};
 
 use crossterm::event::KeyCode;
-use tui::{layout::Rect, widgets::Widget};
+use tui::{
+	layout::Rect,
+	widgets::{StatefulWidget},
+};
 
 use crate::{Input, XY};
 
 use super::Dialog;
 
+#[derive(Default)]
+pub struct EditView();
+
 // TODO: use grapheme clusters instead...
 #[derive(Debug, Clone)]
-pub struct CellEditor {
+pub struct EditState {
 	buffer: Vec<char>,
 	/// [0, buffer.len()]
 	cursor: usize,
 }
 
-impl CellEditor {
+impl EditState {
 	pub fn from_str(s: &str) -> Self {
 		let buffer: Vec<_> = s.chars().collect();
 		Self {
@@ -80,11 +86,13 @@ impl CellEditor {
 	}
 }
 
-impl Widget for &CellEditor {
-	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer) {
+impl StatefulWidget for EditView {
+	type State = EditState;
+
+	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer, state: &mut Self::State) {
 		// TODO: handle overflow w/ ellipses
 		let y = area.y;
-		for (i, c) in self.iter().enumerate() {
+		for (i, c) in state.iter().enumerate() {
 			if i >= area.width as usize {
 				break;
 			}
@@ -96,7 +104,8 @@ impl Widget for &CellEditor {
 	}
 }
 
-impl CellEditor {
+impl EditState {
+	/// Position of the editing cursor if the view is rendered in area.
 	pub fn cursor(&self, area: Rect) -> XY<u16> {
 		XY {
 			x: area.x + self.cursor as u16,
@@ -105,7 +114,7 @@ impl CellEditor {
 	}
 }
 
-impl Dialog for &mut CellEditor {
+impl Dialog for &mut EditState {
 	type Output = Option<String>;
 
 	fn handle_input(self, key: Input) -> ControlFlow<Self::Output> {
