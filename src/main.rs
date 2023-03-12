@@ -156,6 +156,7 @@ impl Program {
 
 	fn draw(&mut self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
 		let mut cursor_pos = None;
+		trace!("Beginning draw");
 		t.draw(|f| {
 			let [main, info]: [Rect; 2] = Layout::default()
 				.direction(layout::Direction::Vertical)

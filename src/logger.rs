@@ -5,7 +5,7 @@ use std::{
 };
 
 use log::{Level, Log};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 
 pub struct BufferLogger;
 
@@ -39,11 +39,18 @@ static START: Lazy<Instant> = Lazy::new(|| Instant::now());
 
 static LOGGER: BufferLogger = BufferLogger;
 
+static OTHER_LOGGER: OnceCell<env_logger::Logger> = OnceCell::new();
+
 pub fn init() {
 	Lazy::force(&START);
 	Lazy::force(&BUFFER);
 	log::set_logger(&LOGGER).unwrap();
 	log::set_max_level(log::LevelFilter::Trace);
+
+	if atty::isnt(atty::Stream::Stderr) {
+		let other = env_logger::Builder::from_default_env().build();
+		OTHER_LOGGER.set(other).unwrap();
+	}
 }
 
 impl Log for BufferLogger {
@@ -52,6 +59,10 @@ impl Log for BufferLogger {
 	}
 
 	fn log(&self, record: &log::Record) {
+		if let Some(other) = OTHER_LOGGER.get() {
+			other.log(record);
+		}
+
 		let mut buffer = BUFFER.lock().unwrap();
 
 		if buffer.len() == buffer.capacity() {
@@ -61,5 +72,9 @@ impl Log for BufferLogger {
 		buffer.push_front(record.into());
 	}
 
-	fn flush(&self) {}
+	fn flush(&self) {
+		if let Some(other) = OTHER_LOGGER.get() {
+			other.flush();
+		}
+	}
 }
