@@ -8,13 +8,12 @@ use std::{
 	ops::{ControlFlow, Index, IndexMut},
 	panic,
 	path::{Path, PathBuf},
-	str::FromStr,
 };
 
 use crossterm::{
 	cursor,
 	event::{
-		self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
+		self, Event, KeyCode, KeyEvent, KeyModifiers,
 	},
 	execute,
 	terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -27,9 +26,13 @@ use tui::{
 	backend::{Backend, CrosstermBackend},
 	layout::{Constraint, Margin, Rect},
 	style::{Modifier, Style},
-	widgets::{Block, Borders, Cell, Clear, Paragraph, Row, StatefulWidget, Table, Widget},
+	widgets::{
+		Block, Borders, Cell, Clear, List, ListItem, Row, StatefulWidget, Table, Widget,
+	},
 	Terminal,
 };
+
+mod logger;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -110,6 +113,10 @@ impl Program {
 				}
 				None
 			}
+			State::Debug => {
+				self.state = State::Normal;
+				None
+			}
 		};
 		// TODO: fix this
 		self.should_redraw = true;
@@ -135,6 +142,12 @@ impl Program {
 			}
 			Replace => {
 				self.state = State::EditCell(CellEditor::from_str(""));
+			}
+			ToggleDebug => {
+				self.state = match self.state {
+					State::Debug => State::Normal,
+					_ => State::Debug,
+				};
 			}
 		}
 
@@ -174,6 +187,13 @@ impl Program {
 					f.render_widget(editor, inner);
 					cursor_pos = Some(editor.cursor(inner));
 				}
+				Debug => {
+					let border = Block::default().title("Logs").borders(Borders::ALL);
+					let inner = border.inner(size);
+					f.render_widget(Clear, size);
+					f.render_widget(border, size);
+					f.render_widget(DebugView, inner);
+				}
 			}
 		})?;
 
@@ -195,6 +215,7 @@ enum State {
 	Normal,
 	/// Currently editing the selected cell
 	EditCell(CellEditor),
+	Debug,
 }
 
 // TODO: use grapheme clusters instead...
@@ -488,7 +509,11 @@ impl StatefulWidget for &Grid {
 fn setup_terminal() -> io::Result<Terminal<impl Backend>> {
 	enable_raw_mode()?;
 	let mut stdout = io::stdout();
-	execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+	execute!(
+		stdout,
+		EnterAlternateScreen,
+		// EnableMouseCapture
+	)?;
 	let backend = CrosstermBackend::new(stdout);
 	Terminal::new(backend)
 }
@@ -500,7 +525,7 @@ fn teardown_terminal() -> io::Result<()> {
 	execute!(
 		stdout,
 		LeaveAlternateScreen,
-		DisableMouseCapture,
+		// DisableMouseCapture,
 		cursor::Show
 	)?;
 	Ok(())
@@ -514,8 +539,32 @@ enum Direction {
 	Left,
 }
 
+struct DebugView;
+
+impl Widget for DebugView {
+	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer) {
+		let lock = logger::BUFFER.lock().unwrap();
+		let items: Vec<_> = lock
+			.iter()
+			.take(area.height as usize)
+			.map(|r| {
+				ListItem::new(format!(
+					"[{:5}] {: >6.2}s {}: {}",
+					r.level,
+					r.time.as_secs_f64(),
+					r.target,
+					r.msg
+				))
+			})
+			.collect();
+		let list = List::new(items);
+		Widget::render(list, area, buf);
+	}
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
 	// TODO: in-memory logger
+	logger::init();
 
 	let opt = Opt::from_args();
 
