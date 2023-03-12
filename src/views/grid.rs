@@ -1,14 +1,24 @@
 use std::cmp::max;
 
 use tui::{
-	layout::Constraint,
+	buffer::Buffer,
+	layout::{Constraint, Rect},
 	style::{Modifier, Style},
-	widgets::Widget,
+	widgets::{StatefulWidget, Widget},
 };
 
 use crate::{Grid, XY};
 
-use super::{Cell, Row, Table};
+use super::{Row, Table, TableState};
+
+#[derive(Default)]
+pub struct GridState(TableState);
+
+impl GridState {
+	pub fn select(&mut self, s: XY<usize>) {
+		self.0.select(Some(s));
+	}
+}
 
 pub struct GridView<'g> {
 	grid: &'g Grid,
@@ -21,22 +31,14 @@ impl<'g> GridView<'g> {
 	}
 }
 
-impl<'g> Widget for GridView<'g> {
-	fn render(self, area: tui::layout::Rect, buf: &mut tui::buffer::Buffer) {
-		let table = Table::new(self.grid.cells.iter().enumerate().map(|(y, row)| {
-			let row = row.clone();
-			if y == self.selection.y {
-				let mut row: Vec<_> = row.into_iter().map(Cell::from).collect();
-				row[self.selection.x] = row[self.selection.x]
-					.clone()
-					.style(Style::default().add_modifier(Modifier::BOLD));
-				Row::new(row)
-			} else {
-				Row::new(row)
-			}
-		}));
-		// highlight selected
+impl<'g> StatefulWidget for GridView<'g> {
+	type State = GridState;
 
+	fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+		let table = Table::new(self.grid.cells.iter().map(|row| {
+			let row = row.clone();
+			Row::new(row)
+		}));
 		// use longest width
 		let constraints = self
 			.grid
@@ -56,6 +58,13 @@ impl<'g> Widget for GridView<'g> {
 
 		let table = table.widths(&constraints);
 
-		Widget::render(table, area, buf);
+		StatefulWidget::render(table, area, buf, &mut state.0);
+	}
+}
+
+impl<'g> Widget for GridView<'g> {
+	fn render(self, area: Rect, buf: &mut Buffer) {
+		let mut state = GridState::default();
+		StatefulWidget::render(self, area, buf, &mut state);
 	}
 }

@@ -28,7 +28,7 @@ use tui::{
 };
 use views::{Dialog, EditState, EditView};
 
-use crate::views::{DebugView, GridView};
+use crate::views::{DebugView, GridState, GridView};
 
 mod logger;
 mod views;
@@ -39,7 +39,7 @@ struct Opt {
 	file: PathBuf,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct XY<T> {
 	x: T,
 	y: T,
@@ -188,7 +188,9 @@ impl Program {
 				.borders(Borders::ALL);
 			let inner = block.inner(size);
 			f.render_widget(block, size);
-			f.render_widget(GridView::new(&self.grid, self.selection), inner);
+			let mut state = GridState::default();
+			state.select(self.selection);
+			f.render_stateful_widget(GridView::new(&self.grid, self.selection), inner, &mut state);
 
 			use State::*;
 			match &mut self.state {
