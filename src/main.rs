@@ -387,10 +387,10 @@ enum Direction {
 fn main() -> Result<(), Box<dyn Error>> {
 	// TODO: in-memory logger
 	logger::init();
+	info!("Starting");
 
 	let opt = Opt::from_args();
 
-	info!("Hello, world!");
 	let mut terminal = setup_terminal()?;
 
 	// reset terminal on panic
@@ -431,6 +431,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		}
 	}
 
+	info!("Stopping");
 	teardown_terminal()?;
 
 	Ok(())

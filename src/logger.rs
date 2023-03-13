@@ -1,13 +1,20 @@
 use std::{
 	collections::VecDeque,
+	env,
 	sync::Mutex,
 	time::{Duration, Instant},
 };
 
-use log::{Level, Log};
-use once_cell::sync::{Lazy, OnceCell};
+use env_logger::filter::{self, Filter};
+use log::{Level, LevelFilter, Log};
+use once_cell::sync::OnceCell;
 
-pub struct BufferLogger;
+pub struct BufferLogger {
+	buffer: Mutex<VecDeque<Record>>,
+	filter: Filter,
+	start: Instant,
+	other: Option<env_logger::Logger>,
+}
 
 pub struct Record {
 	pub time: Duration,
@@ -16,9 +23,9 @@ pub struct Record {
 	pub msg: String,
 }
 
-impl From<&log::Record<'_>> for Record {
-	fn from(value: &log::Record<'_>) -> Self {
-		let time = Instant::now().duration_since(*START);
+impl Record {
+	fn new(value: &log::Record<'_>, start: Instant) -> Self {
+		let time = Instant::now().duration_since(start);
 		let level = value.level();
 		let target = value.target().to_string();
 		let msg = value.args().to_string();
@@ -32,48 +39,84 @@ impl From<&log::Record<'_>> for Record {
 	}
 }
 
-pub static BUFFER: Lazy<Mutex<VecDeque<Record>>> =
-	Lazy::new(|| Mutex::new(VecDeque::with_capacity(100)));
+static LOGGER: OnceCell<BufferLogger> = OnceCell::new();
 
-static START: Lazy<Instant> = Lazy::new(|| Instant::now());
-
-static LOGGER: BufferLogger = BufferLogger;
-
-static OTHER_LOGGER: OnceCell<env_logger::Logger> = OnceCell::new();
+pub fn buffer() -> Option<&'static Mutex<VecDeque<Record>>> {
+	LOGGER.get().map(|l| &l.buffer)
+}
 
 pub fn init() {
-	Lazy::force(&START);
-	Lazy::force(&BUFFER);
-	log::set_logger(&LOGGER).unwrap();
-	log::set_max_level(log::LevelFilter::Trace);
+	const LOG_ENV: &str = "RUST_LOG";
+
+	let mut filter = filter::Builder::new();
+	match env::var(LOG_ENV) {
+		Ok(v) if !v.trim().is_empty() => {
+			filter.parse(&v);
+		}
+		Err(_) | Ok(_) => {
+			filter.filter_level(LevelFilter::Info);
+		}
+	}
+	let filter = filter.build();
+
+	let max_level = filter.filter();
+
+	let mut logger = BufferLogger::new(filter);
 
 	if atty::isnt(atty::Stream::Stderr) {
-		let other = env_logger::Builder::from_default_env().build();
-		OTHER_LOGGER.set(other).unwrap();
+		let other = env_logger::Builder::new().build();
+		logger.with_other(other);
+	}
+
+	log::set_logger(LOGGER.get_or_init(|| logger)).unwrap();
+	log::set_max_level(max_level);
+	info!("Log level: {max_level}; set with {LOG_ENV:?} env var: <https://docs.rs/env_logger/#example>");
+	debug!("Parsed log filters: {:?}", LOGGER.get().unwrap().filter);
+}
+
+impl BufferLogger {
+	fn new(filter: Filter) -> Self {
+		let start = Instant::now();
+		let buffer = Mutex::new(VecDeque::with_capacity(100));
+		Self {
+			buffer,
+			start,
+			filter,
+			other: None,
+		}
+	}
+
+	fn with_other(&mut self, other: env_logger::Logger) -> &mut Self {
+		self.other = Some(other);
+		self
 	}
 }
 
 impl Log for BufferLogger {
-	fn enabled(&self, _metadata: &log::Metadata) -> bool {
-		true
+	fn enabled(&self, metadata: &log::Metadata) -> bool {
+		self.filter.enabled(metadata)
 	}
 
 	fn log(&self, record: &log::Record) {
-		if let Some(other) = OTHER_LOGGER.get() {
+		if !self.enabled(record.metadata()) {
+			return;
+		}
+
+		if let Some(other) = self.other.as_ref() {
 			other.log(record);
 		}
 
-		let mut buffer = BUFFER.lock().unwrap();
+		let mut buffer = self.buffer.lock().unwrap();
 
 		if buffer.len() == buffer.capacity() {
 			buffer.pop_back();
 		}
 
-		buffer.push_front(record.into());
+		buffer.push_front(Record::new(record, self.start));
 	}
 
 	fn flush(&self) {
-		if let Some(other) = OTHER_LOGGER.get() {
+		if let Some(other) = self.other.as_ref() {
 			other.flush();
 		}
 	}
