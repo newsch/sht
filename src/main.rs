@@ -1,4 +1,13 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
+// TODO: status messages
+// TODO: reload file
+// TODO: undo/redo
+// TODO: adding/removing columns and rows
+// TODO: handle different formats ala xsv
+// TODO: snap edit view to cell location
+// TODO: unify bindings
+// TODO: online help system
+// TODO: interrupt handling
 use std::{
 	collections::HashMap,
 	error::Error,
@@ -64,11 +73,12 @@ impl Program {
 
 		let grid = Grid::from_csv(rdr)?;
 
-		let _selection = XY { x: 0, y: 0 };
+		let status = format!("Read from {filename:?}");
 
 		Ok(Self {
 			grid,
 			filename,
+			status,
 			..Default::default()
 		})
 	}
