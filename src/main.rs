@@ -25,7 +25,7 @@ use tui::{
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
-use views::{Dialog, EditState, EditView};
+use views::{DebugState, Dialog, EditState, EditView};
 
 use crate::views::{DebugView, GridState, GridView};
 
@@ -44,6 +44,7 @@ pub struct XY<T> {
 	y: T,
 }
 
+#[derive(Default, Debug)]
 struct Program {
 	state: State,
 	grid: Grid,
@@ -52,6 +53,7 @@ struct Program {
 	bindings: Bindings,
 	should_redraw: bool,
 	status: String,
+	debug_state: DebugState,
 }
 
 impl Program {
@@ -63,16 +65,12 @@ impl Program {
 
 		let grid = Grid::from_csv(rdr)?;
 
-		let selection = XY { x: 0, y: 0 };
+		let _selection = XY { x: 0, y: 0 };
 
 		Ok(Self {
 			grid,
 			filename,
-			state: State::Normal,
-			bindings: Bindings::default(),
-			should_redraw: true,
-			selection,
-			status: String::new(),
+			..Default::default()
 		})
 	}
 
@@ -114,7 +112,9 @@ impl Program {
 				None
 			}
 			State::Debug => {
-				self.state = State::Normal;
+				if let ControlFlow::Break(()) = self.debug_state.handle_input(i) {
+					self.state = State::Normal;
+				}
 				None
 			}
 		};
@@ -216,7 +216,7 @@ impl Program {
 					let inner = border.inner(size);
 					f.render_widget(Clear, size);
 					f.render_widget(border, size);
-					f.render_widget(DebugView, inner);
+					f.render_stateful_widget(DebugView, inner, &mut self.debug_state);
 				}
 			}
 		})?;
@@ -233,9 +233,10 @@ impl Program {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum State {
 	/// Moving around the sheet
+	#[default]
 	Normal,
 	/// Currently editing the selected cell
 	EditCell(EditState),
@@ -274,6 +275,7 @@ impl From<KeyEvent> for Input {
 	}
 }
 
+#[derive(Debug)]
 struct Bindings(HashMap<Input, Action>);
 
 impl Default for Bindings {
@@ -304,6 +306,7 @@ impl Bindings {
 	}
 }
 
+#[derive(Default, Debug)]
 pub struct Grid {
 	cells: Vec<Vec<String>>,
 	/// Dimensions of cells

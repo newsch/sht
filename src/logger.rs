@@ -1,6 +1,6 @@
 use std::{
 	collections::VecDeque,
-	env,
+	env, mem,
 	sync::Mutex,
 	time::{Duration, Instant},
 };
@@ -11,6 +11,7 @@ use once_cell::sync::OnceCell;
 
 pub struct BufferLogger {
 	buffer: Mutex<VecDeque<Record>>,
+	read_buffer: Mutex<VecDeque<Record>>,
 	filter: Filter,
 	start: Instant,
 	other: Option<env_logger::Logger>,
@@ -41,8 +42,13 @@ impl Record {
 
 static LOGGER: OnceCell<BufferLogger> = OnceCell::new();
 
+/// Returns a shared buffer of logs from oldest to newest.
+///
+/// Logging while the buffer is locked will not cause a deadlock.
 pub fn buffer() -> Option<&'static Mutex<VecDeque<Record>>> {
-	LOGGER.get().map(|l| &l.buffer)
+	let l = LOGGER.get()?;
+	l.swap();
+	Some(&l.read_buffer)
 }
 
 pub fn init() {
@@ -76,10 +82,13 @@ pub fn init() {
 
 impl BufferLogger {
 	fn new(filter: Filter) -> Self {
+		let buf_size = 100;
 		let start = Instant::now();
-		let buffer = Mutex::new(VecDeque::with_capacity(100));
+		let buffer = Mutex::new(VecDeque::with_capacity(buf_size));
+		let read_buffer = Mutex::new(VecDeque::with_capacity(buf_size));
 		Self {
 			buffer,
+			read_buffer,
 			start,
 			filter,
 			other: None,
@@ -89,6 +98,17 @@ impl BufferLogger {
 	fn with_other(&mut self, other: env_logger::Logger) -> &mut Self {
 		self.other = Some(other);
 		self
+	}
+
+	/// Move written logs to read buffer
+	fn swap(&self) {
+		let mut write = self.buffer.lock().unwrap();
+		let mut read = self.read_buffer.lock().unwrap();
+		let num_read_free = read.capacity() - read.len();
+		let num_write = write.len();
+		let space_to_make = num_write.saturating_sub(num_read_free);
+		drop(read.drain(..space_to_make));
+		read.append(&mut write);
 	}
 }
 
@@ -109,10 +129,10 @@ impl Log for BufferLogger {
 		let mut buffer = self.buffer.lock().unwrap();
 
 		if buffer.len() == buffer.capacity() {
-			buffer.pop_back();
+			buffer.pop_front();
 		}
 
-		buffer.push_front(Record::new(record, self.start));
+		buffer.push_back(Record::new(record, self.start));
 	}
 
 	fn flush(&self) {

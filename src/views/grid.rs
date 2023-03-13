@@ -2,7 +2,7 @@ use std::cmp::max;
 
 use tui::{
 	buffer::Buffer,
-	layout::{Rect},
+	layout::Rect,
 	widgets::{StatefulWidget, Widget},
 };
 

@@ -1,8 +1,6 @@
-
-
 use tui::{
 	buffer::Buffer,
-	layout::{Rect},
+	layout::Rect,
 	style::{Modifier, Style},
 	text::Text,
 	widgets::{StatefulWidget, Widget},
@@ -107,7 +105,6 @@ impl<'a> Table<'a> {
 		offset: usize,
 		max_width: u16,
 	) -> (usize, usize) {
-		dbg!(offset, selected, max_width);
 		let offset = offset.min(self.widths.len().saturating_sub(1));
 		let mut start = offset;
 		let mut end = offset;
@@ -121,8 +118,6 @@ impl<'a> Table<'a> {
 				break;
 			}
 		}
-
-		dbg!(width, start, end);
 
 		let Some(selected) = selected else {
 			return (start, end);
@@ -228,7 +223,6 @@ impl<'a> StatefulWidget for Table<'a> {
 		let (col_start, col_end) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
-		dbg!(row_start, row_end, col_start, col_end);
 		for (row_t, table_row) in self
 			.rows
 			.iter()
@@ -262,8 +256,6 @@ impl<'a> StatefulWidget for Table<'a> {
 					width: *width,
 					height: row_height,
 				};
-				dbg!(row_t, col_t);
-				dbg!(table_row_area, cell_area);
 				cell_area = cell_area.intersection(table_row_area);
 				render_cell(buf, cell, cell_area);
 				let is_selected = state
