@@ -1,6 +1,6 @@
 use std::{
 	collections::VecDeque,
-	env, mem,
+	env,
 	sync::Mutex,
 	time::{Duration, Instant},
 };

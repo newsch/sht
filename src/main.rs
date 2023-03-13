@@ -25,7 +25,7 @@ use tui::{
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
-use views::{DebugState, Dialog, EditState, EditView};
+use views::{Dialog, EditState, EditView};
 
 use crate::views::{DebugView, GridState, GridView};
 
@@ -53,7 +53,6 @@ struct Program {
 	bindings: Bindings,
 	should_redraw: bool,
 	status: String,
-	debug_state: DebugState,
 }
 
 impl Program {
@@ -112,9 +111,7 @@ impl Program {
 				None
 			}
 			State::Debug => {
-				if let ControlFlow::Break(()) = self.debug_state.handle_input(i) {
-					self.state = State::Normal;
-				}
+				self.state = State::Normal;
 				None
 			}
 		};
@@ -216,7 +213,7 @@ impl Program {
 					let inner = border.inner(size);
 					f.render_widget(Clear, size);
 					f.render_widget(border, size);
-					f.render_stateful_widget(DebugView, inner, &mut self.debug_state);
+					f.render_widget(DebugView, inner);
 				}
 			}
 		})?;
