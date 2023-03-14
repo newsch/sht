@@ -1,6 +1,4 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
-// TODO: status messages
-// TODO: reload file
 // TODO: undo/redo
 // TODO: adding/removing columns and rows
 // TODO: handle different formats ala xsv
@@ -11,6 +9,7 @@
 use std::{
 	collections::HashMap,
 	error::Error,
+	fmt::Display,
 	io,
 	ops::{ControlFlow, Index, IndexMut},
 	panic,
@@ -30,7 +29,8 @@ use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
 	layout::{self, Constraint, Layout, Margin, Rect},
-	style::{Modifier, Style},
+	style::{Color, Modifier, Style},
+	text::Text,
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
@@ -53,6 +53,53 @@ pub struct XY<T> {
 	y: T,
 }
 
+#[derive(Debug)]
+enum Status {
+	Read(PathBuf, io::Result<()>),
+	Write(PathBuf, io::Result<()>),
+}
+
+impl Status {
+	fn err(&self) -> Option<&io::Error> {
+		Some(match self {
+			Status::Read(.., Err(e)) => e,
+			Status::Write(.., Err(e)) => e,
+			_ => return None,
+		})
+	}
+
+	fn is_err(&self) -> bool {
+		self.err().is_some()
+	}
+}
+
+impl Display for Status {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Status::Read(p, Ok(())) => write!(f, "Read from {p:?}")?,
+			Status::Read(p, Err(e)) => write!(f, "Error reading from {p:?}: {e}")?,
+			Status::Write(p, Ok(())) => write!(f, "Wrote to {p:?}")?,
+			Status::Write(p, Err(e)) => write!(f, "Error writing to {p:?}: {e}")?,
+		}
+		Ok(())
+	}
+}
+
+impl<'s, 't> Into<Text<'t>> for &'s Status {
+	fn into(self) -> Text<'t> {
+		let style = Style::default();
+
+		Text::styled(
+			self.to_string(),
+			if self.is_err() {
+				style.fg(Color::Red)
+			} else {
+				style
+			},
+		)
+	}
+}
+
 #[derive(Default, Debug)]
 struct Program {
 	state: State,
@@ -61,26 +108,21 @@ struct Program {
 	selection: XY<usize>,
 	bindings: Bindings,
 	should_redraw: bool,
-	status: String,
+	/// Result of latest action to display to user
+	status_msg: Option<Status>,
 }
 
 impl Program {
 	fn from_path(filename: impl AsRef<Path>) -> io::Result<Self> {
 		let filename = filename.as_ref().to_path_buf();
-		let rdr = csv::ReaderBuilder::new()
-			.has_headers(false)
-			.from_path(&filename)?;
 
-		let grid = Grid::from_csv(rdr)?;
-
-		let status = format!("Read from {filename:?}");
-
-		Ok(Self {
-			grid,
+		let mut s = Self {
 			filename,
-			status,
 			..Default::default()
-		})
+		};
+		s.read()?;
+
+		Ok(s)
 	}
 
 	fn assert_selection_valid(&self) {
@@ -139,16 +181,16 @@ impl Program {
 		use Action::*;
 		match action {
 			Quit => return Ok(Some(ExternalAction::Quit)),
-			Write => {
-				let mut wtr = csv::Writer::from_path(&self.filename)?;
-				self.grid.to_csv(&mut wtr)?;
-			}
+			Write => self.set_status(Status::Write(self.filename.to_owned(), self.write())),
+			Read => self.status_msg = Some(Status::Read(self.filename.to_owned(), self.read())),
 			Move(d) => self.handle_move(d),
 			Edit => {
 				self.state = State::EditCell(EditState::from_str(&self.grid[self.selection]));
+				self.clear_status();
 			}
 			Replace => {
 				self.state = State::EditCell(EditState::from_str(""));
+				self.clear_status();
 			}
 			ToggleDebug => {
 				self.state = match self.state {
@@ -159,6 +201,33 @@ impl Program {
 		}
 
 		Ok(None)
+	}
+
+	fn set_status(&mut self, status: Status) {
+		if status.is_err() {
+			error!("{}", status);
+		} else {
+			info!("{status}");
+		}
+		self.status_msg = Some(status);
+	}
+
+	fn clear_status(&mut self) {
+		self.status_msg = None;
+	}
+
+	fn write(&self) -> io::Result<()> {
+		let mut wtr = csv::Writer::from_path(&self.filename)?;
+		self.grid.to_csv(&mut wtr)?;
+		Ok(())
+	}
+
+	fn read(&mut self) -> io::Result<()> {
+		let rdr = csv::ReaderBuilder::new()
+			.has_headers(false)
+			.from_path(&self.filename)?;
+		self.grid = Grid::from_csv(rdr)?;
+		Ok(())
 	}
 
 	fn draw(&mut self, t: &mut Terminal<impl Backend>) -> io::Result<()> {
@@ -183,7 +252,11 @@ impl Program {
 					.split(info)
 					.try_into()
 					.unwrap();
-				f.render_widget(Paragraph::new(self.status.as_str()).style(style), status);
+				if let Some(s) = &self.status_msg {
+					f.render_widget(Paragraph::new(s).style(style), status);
+				} else {
+					f.render_widget(Paragraph::new("").style(style), status);
+				}
 				f.render_widget(Paragraph::new(pos_msg).style(style), pos);
 			}
 
@@ -264,6 +337,8 @@ enum Action {
 	Replace,
 	/// Write state to original file
 	Write,
+	/// Reload the original file, dropping any unsaved changes
+	Read,
 	/// Quit the program
 	Quit,
 	ToggleDebug,
@@ -296,8 +371,9 @@ impl Default for Bindings {
 		m.insert(Input(Down, none), Move(Direction::Down));
 		m.insert(Input(Left, none), Move(Direction::Left));
 		m.insert(Input(Right, none), Move(Direction::Right));
-		m.insert(Input(Char('q'), none), Quit);
-		m.insert(Input(Char('w'), none), Write);
+		m.insert(Input(Char('c'), KeyModifiers::CONTROL), Quit);
+		m.insert(Input(Char('s'), KeyModifiers::CONTROL), Write);
+		m.insert(Input(Char('r'), KeyModifiers::CONTROL), Read);
 		m.insert(Input(F(2), none), Edit);
 		m.insert(Input(Enter, none), Replace);
 		m.insert(Input(F(12), none), ToggleDebug);
