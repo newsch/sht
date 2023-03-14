@@ -11,7 +11,7 @@ use std::{
 	error::Error,
 	fmt::Display,
 	io,
-	ops::{ControlFlow, Index, IndexMut},
+	ops::{ControlFlow},
 	panic,
 	path::{Path, PathBuf},
 };
@@ -38,8 +38,10 @@ use views::{Dialog, EditState, EditView};
 
 use crate::views::{DebugView, GridState, GridView};
 
+mod grid;
 mod logger;
 mod views;
+use grid::Grid;
 
 #[derive(Debug, StructOpt)]
 struct Opt {
@@ -127,7 +129,7 @@ impl Program {
 
 	fn assert_selection_valid(&self) {
 		let sel = self.selection;
-		let size = self.grid.size;
+		let size = self.grid.size();
 		assert!(
 			sel.x < size.x && sel.y < size.y,
 			"Selection {sel:?} out of bounds {size:?}"
@@ -138,7 +140,7 @@ impl Program {
 		self.assert_selection_valid();
 		use Direction::*;
 		let XY { x, y } = self.selection;
-		let size = self.grid.size;
+		let size = self.grid.size();
 		let s = match m {
 			Up if y > 0 => XY { x, y: y - 1 },
 			Down if y < size.y - 1 => XY { x, y: y + 1 },
@@ -386,54 +388,6 @@ impl Bindings {
 	fn get(&self, k: impl Into<Input>) -> Option<Action> {
 		let k = k.into();
 		self.0.get(&k).map(|v| *v)
-	}
-}
-
-#[derive(Default, Debug)]
-pub struct Grid {
-	cells: Vec<Vec<String>>,
-	/// Dimensions of cells
-	size: XY<usize>,
-}
-
-impl Index<XY<usize>> for Grid {
-	type Output = String;
-
-	fn index(&self, index: XY<usize>) -> &Self::Output {
-		&self.cells[index.y][index.x]
-	}
-}
-
-impl IndexMut<XY<usize>> for Grid {
-	fn index_mut(&mut self, index: XY<usize>) -> &mut Self::Output {
-		&mut self.cells[index.y][index.x]
-	}
-}
-
-impl Grid {
-	fn from_csv<R: io::Read>(mut rdr: csv::Reader<R>) -> io::Result<Self> {
-		let records: Vec<_> = rdr.records().collect::<Result<_, _>>()?;
-
-		let cells: Vec<Vec<_>> = records
-			.into_iter()
-			.map(|r| r.iter().map(|s| s.to_string()).collect())
-			.collect();
-
-		let height = cells.len();
-		let width = if height == 0 { 0 } else { cells[0].len() };
-		let size = XY {
-			x: width,
-			y: height,
-		};
-
-		Ok(Self { cells, size })
-	}
-
-	fn to_csv<W: io::Write>(&self, wtr: &mut csv::Writer<W>) -> io::Result<()> {
-		for row in &self.cells {
-			wtr.write_record(row)?;
-		}
-		Ok(())
 	}
 }
 
