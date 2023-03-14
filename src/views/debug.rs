@@ -1,6 +1,3 @@
-
-
-
 use log::Level;
 use tui::{
 	layout::Rect,
@@ -8,10 +5,6 @@ use tui::{
 	text::{Span, Spans},
 	widgets::{List, ListItem, Paragraph, Widget},
 };
-
-
-
-
 
 // TODO: handle scrolling, include state
 pub struct DebugView;

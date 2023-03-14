@@ -9,7 +9,7 @@ pub use grid::*;
 mod table;
 use table::*;
 
-use crate::Input;
+use crate::input::Input;
 
 /// Temporary interactive widget that takes control of input.
 pub trait Dialog {
