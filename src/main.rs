@@ -3,6 +3,8 @@
 // TODO: handle different formats ala xsv
 // TODO: snap edit view to cell location
 // TODO: unify bindings
+// TODO: command palette
+// TODO: display chord options
 // TODO: online help system
 // TODO: interrupt handling
 // TODO: view state in debug view
@@ -12,6 +14,7 @@
 // TODO: draw infinite grid,
 // TODO: draw frozen column/row numbers
 // TODO: freeze header
+// TODO: copy/paste
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{

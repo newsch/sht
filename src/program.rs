@@ -167,6 +167,10 @@ impl Program {
 		debug!("{} -> {action:?}", self.input_buf);
 		self.input_buf.clear();
 
+		self.handle_action(action)
+	}
+
+	fn handle_action(&mut self, action: Action) -> io::Result<Option<ExternalAction>> {
 		use Action::*;
 		match action {
 			Quit => return Ok(Some(ExternalAction::Quit)),
@@ -181,21 +185,26 @@ impl Program {
 				self.state = State::EditCell(EditState::from_str(""));
 				self.clear_status();
 			}
-			Clear => {
-				self.grid
-					.edit(self.selection, String::new())
-					.track(&mut self.change_tracker);
-			}
-			DeleteRow => {
-				self.grid
-					.delete_row(self.selection.y)
-					.track(&mut self.change_tracker);
-			}
-			DeleteCol => {
-				self.grid
-					.delete_col(self.selection.x)
-					.track(&mut self.change_tracker);
-			}
+			Clear => self
+				.grid
+				.edit(self.selection, String::new())
+				.track(&mut self.change_tracker),
+			InsertRow => self
+				.grid
+				.insert_row(self.selection.y, Vec::new())
+				.track(&mut self.change_tracker),
+			InsertCol => self
+				.grid
+				.insert_col(self.selection.x, Vec::new())
+				.track(&mut self.change_tracker),
+			DeleteRow => self
+				.grid
+				.delete_row(self.selection.y)
+				.track(&mut self.change_tracker),
+			DeleteCol => self
+				.grid
+				.delete_col(self.selection.x)
+				.track(&mut self.change_tracker),
 			Undo => {
 				if let None = self.change_tracker.undo(&mut self.grid) {
 					self.set_status(Status::UndoLimit)
@@ -213,7 +222,6 @@ impl Program {
 				};
 			}
 		}
-
 		Ok(None)
 	}
 
@@ -370,6 +378,10 @@ pub enum Action {
 	DeleteCol,
 	/// Delete row of current cursor
 	DeleteRow,
+	/// Insert column of current cursor
+	InsertCol,
+	/// Insert row of current cursor
+	InsertRow,
 	Undo,
 	Redo,
 	/// Write state to original file

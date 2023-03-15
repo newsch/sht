@@ -1,7 +1,6 @@
 use std::{
 	collections::HashMap,
 	fmt::{Debug, Display},
-	io::Write,
 };
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -129,6 +128,16 @@ impl Default for Bindings<Action> {
 			Input(Char('-'), KeyModifiers::ALT),
 			Input(Char('r'), none),
 			DeleteRow,
+		);
+		s.insert_chorded(
+			Input(Char('+'), KeyModifiers::ALT),
+			Input(Char('c'), none),
+			InsertCol,
+		);
+		s.insert_chorded(
+			Input(Char('+'), KeyModifiers::ALT),
+			Input(Char('r'), none),
+			InsertRow,
 		);
 
 		s
