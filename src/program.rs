@@ -15,7 +15,7 @@ use tui::{
 };
 
 use crate::{
-	grid::Grid,
+	grid::{ChangeTracker, Grid},
 	input::{Bindings, Input},
 	views::{DebugView, Dialog, EditState, EditView, GridState, GridView},
 	XY,
@@ -25,6 +25,8 @@ use crate::{
 enum Status {
 	Read(PathBuf, io::Result<()>),
 	Write(PathBuf, io::Result<()>),
+	UndoLimit,
+	RedoLimit,
 }
 
 impl Status {
@@ -48,6 +50,8 @@ impl Display for Status {
 			Status::Read(p, Err(e)) => write!(f, "Error reading from {p:?}: {e}")?,
 			Status::Write(p, Ok(())) => write!(f, "Wrote to {p:?}")?,
 			Status::Write(p, Err(e)) => write!(f, "Error writing to {p:?}: {e}")?,
+			Status::UndoLimit => write!(f, "Nothing left to undo")?,
+			Status::RedoLimit => write!(f, "Nothing left to redo")?,
 		}
 		Ok(())
 	}
@@ -72,6 +76,7 @@ impl<'s, 't> Into<Text<'t>> for &'s Status {
 pub struct Program {
 	state: State,
 	grid: Grid,
+	change_tracker: ChangeTracker,
 	filename: PathBuf,
 	selection: XY<usize>,
 	bindings: Bindings,
@@ -89,6 +94,8 @@ impl Program {
 			..Default::default()
 		};
 		s.read()?;
+		// first read shouldn't be undone
+		s.change_tracker = Default::default();
 
 		Ok(s)
 	}
@@ -124,7 +131,9 @@ impl Program {
 			State::EditCell(state) => {
 				if let ControlFlow::Break(o) = state.handle_input(i) {
 					if let Some(new_contents) = o {
-						self.grid[self.selection] = new_contents;
+						self.grid
+							.edit(self.selection, new_contents)
+							.track(&mut self.change_tracker);
 					}
 					self.state = State::Normal;
 				}
@@ -145,6 +154,7 @@ impl Program {
 			debug!("Unhandled input: {i:?}");
 			return Ok(None);
 		};
+		debug!("{i:?} -> {action:?}");
 
 		use Action::*;
 		match action {
@@ -159,6 +169,16 @@ impl Program {
 			Replace => {
 				self.state = State::EditCell(EditState::from_str(""));
 				self.clear_status();
+			}
+			Undo => {
+				if let None = self.change_tracker.undo(&mut self.grid) {
+					self.set_status(Status::UndoLimit)
+				}
+			}
+			Redo => {
+				if let None = self.change_tracker.redo(&mut self.grid) {
+					self.set_status(Status::RedoLimit)
+				}
 			}
 			ToggleDebug => {
 				self.state = match self.state {
@@ -194,7 +214,8 @@ impl Program {
 		let rdr = csv::ReaderBuilder::new()
 			.has_headers(false)
 			.from_path(&self.filename)?;
-		self.grid = Grid::from_csv(rdr)?;
+		let new = Grid::from_csv(rdr)?;
+		self.grid.replace(new).track(&mut self.change_tracker);
 		Ok(())
 	}
 
@@ -307,6 +328,8 @@ pub enum Action {
 	Write,
 	/// Reload the original file, dropping any unsaved changes
 	Read,
+	Undo,
+	Redo,
 	/// Quit the program
 	Quit,
 	ToggleDebug,

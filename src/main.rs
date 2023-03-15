@@ -1,11 +1,12 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
-// TODO: undo/redo
 // TODO: adding/removing columns and rows
 // TODO: handle different formats ala xsv
 // TODO: snap edit view to cell location
 // TODO: unify bindings
 // TODO: online help system
 // TODO: interrupt handling
+// TODO: view state in debug view
+// TODO: serialize and dump/reload program state
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{
@@ -94,7 +95,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 	program.draw(&mut terminal)?;
 
 	loop {
-		let k = match event::read()? {
+		let event = event::read()?;
+		trace!("New event: {event:?}");
+		let k = match event {
 			Event::Key(k) => k,
 			Event::Resize(..) => {
 				program.draw(&mut terminal)?;
