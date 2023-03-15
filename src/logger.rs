@@ -70,7 +70,9 @@ pub fn init() {
 	let mut logger = BufferLogger::new(filter);
 
 	if atty::isnt(atty::Stream::Stderr) {
-		let other = env_logger::Builder::new().build();
+		let other = env_logger::Builder::new()
+			.filter_level(LevelFilter::max())
+			.build();
 		logger.with_other(other);
 	}
 
