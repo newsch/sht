@@ -79,7 +79,7 @@ pub struct Program {
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
 	selection: XY<usize>,
-	bindings: Bindings,
+	bindings: Bindings<Action>,
 	pub should_redraw: bool,
 	/// Result of latest action to display to user
 	status_msg: Option<Status>,
@@ -150,7 +150,7 @@ impl Program {
 	}
 
 	fn handle_input_normal(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
-		let Some(action) = self.bindings.get(i) else {
+		let Some(&action) = self.bindings.get(i) else {
 			debug!("Unhandled input: {i:?}");
 			return Ok(None);
 		};

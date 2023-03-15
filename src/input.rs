@@ -18,9 +18,9 @@ impl From<KeyEvent> for Input {
 }
 
 #[derive(Debug)]
-pub struct Bindings(HashMap<Input, Action>);
+pub struct Bindings<A>(HashMap<Input, A>);
 
-impl Default for Bindings {
+impl Default for Bindings<Action> {
 	fn default() -> Self {
 		use Action::*;
 		use KeyCode::*;
@@ -46,9 +46,9 @@ impl Default for Bindings {
 	}
 }
 
-impl Bindings {
-	pub fn get(&self, k: impl Into<Input>) -> Option<Action> {
+impl<A> Bindings<A> {
+	pub fn get(&self, k: impl Into<Input>) -> Option<&A> {
 		let k = k.into();
-		self.0.get(&k).map(|v| *v)
+		self.0.get(&k)
 	}
 }
