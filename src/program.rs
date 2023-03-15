@@ -170,6 +170,11 @@ impl Program {
 				self.state = State::EditCell(EditState::from_str(""));
 				self.clear_status();
 			}
+			Clear => {
+				self.grid
+					.edit(self.selection, String::new())
+					.track(&mut self.change_tracker);
+			}
 			Undo => {
 				if let None = self.change_tracker.undo(&mut self.grid) {
 					self.set_status(Status::UndoLimit)
@@ -324,6 +329,8 @@ pub enum Action {
 	Edit,
 	/// Replace the current cell
 	Replace,
+	/// Clear the current cell
+	Clear,
 	/// Write state to original file
 	Write,
 	/// Reload the original file, dropping any unsaved changes

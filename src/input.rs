@@ -36,6 +36,8 @@ impl Default for Bindings {
 		m.insert(Input(Char('r'), KeyModifiers::CONTROL), Read);
 		m.insert(Input(Char('z'), KeyModifiers::CONTROL), Undo);
 		m.insert(Input(Char('y'), KeyModifiers::CONTROL), Redo);
+		m.insert(Input(Backspace, none), Clear);
+		m.insert(Input(Delete, none), Clear);
 		m.insert(Input(F(2), none), Edit);
 		m.insert(Input(Enter, none), Replace);
 		m.insert(Input(F(12), none), ToggleDebug);
