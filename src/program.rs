@@ -16,7 +16,7 @@ use tui::{
 
 use crate::{
 	grid::{ChangeTracker, Grid},
-	input::{Bind, Bindings, Input},
+	input::{Bind, Bindings, Input, InputBuffer},
 	views::{DebugView, Dialog, EditState, EditView, GridState, GridView},
 	XY,
 };
@@ -79,7 +79,7 @@ pub struct Program {
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
 	/// Store chorded keys
-	input_buf: Vec<Input>,
+	input_buf: InputBuffer,
 	selection: XY<usize>,
 	bindings: Bindings<Action>,
 	pub should_redraw: bool,
@@ -156,7 +156,7 @@ impl Program {
 		let &action = match self.bindings.get_multiple(&self.input_buf) {
 			None => {
 				debug!("Unhandled input: {i}");
-				self.input_buf.drain(..);
+				self.input_buf.clear();
 				return Ok(None);
 			}
 			Some(Bind::Partial(_)) => {
@@ -164,17 +164,8 @@ impl Program {
 			}
 			Some(Bind::Action(a)) => a,
 		};
-		if log_enabled!(log::Level::Debug) {
-			let mut chord = String::new();
-			for input in self.input_buf.iter() {
-				if !chord.is_empty() {
-					chord.push_str(", ");
-				}
-				chord.push_str(&input.to_string());
-			}
-			debug!("{chord} -> {action:?}");
-		}
-		self.input_buf.drain(..);
+		debug!("{} -> {action:?}", self.input_buf);
+		self.input_buf.clear();
 
 		use Action::*;
 		match action {
@@ -268,11 +259,25 @@ impl Program {
 			// status bar
 			{
 				let style = Style::default().add_modifier(Modifier::REVERSED);
-				let pos_msg = format!("{},{}", self.selection.x + 1, self.selection.y + 1);
+				let chord_msg = (!self.input_buf.is_empty())
+					.then(|| format!("Chord: <{}> ", self.input_buf))
+					.unwrap_or_default();
 
-				let [status, pos]: [Rect; 2] = Layout::default()
+				let state_msg = format!(
+					" {}{},{} {}x{}",
+					chord_msg,
+					self.selection.x + 1,
+					self.selection.y + 1,
+					self.grid.size().x,
+					self.grid.size().y
+				);
+
+				let [status, state]: [Rect; 2] = Layout::default()
 					.direction(layout::Direction::Horizontal)
-					.constraints([Constraint::Min(0), Constraint::Length(pos_msg.len() as u16)])
+					.constraints([
+						Constraint::Min(0),
+						Constraint::Length(state_msg.len() as u16),
+					])
 					.split(info)
 					.try_into()
 					.unwrap();
@@ -281,7 +286,7 @@ impl Program {
 				} else {
 					f.render_widget(Paragraph::new("").style(style), status);
 				}
-				f.render_widget(Paragraph::new(pos_msg).style(style), pos);
+				f.render_widget(Paragraph::new(state_msg).style(style), state);
 			}
 
 			let size = main;

@@ -9,6 +9,9 @@
 // TODO: serialize and dump/reload program state
 // TODO: arbitrarily nested chords
 // TODO: better binding data structure, tree or similar
+// TODO: draw infinite grid,
+// TODO: draw frozen column/row numbers
+// TODO: freeze header
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{

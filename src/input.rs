@@ -1,6 +1,7 @@
 use std::{
 	collections::HashMap,
 	fmt::{Debug, Display},
+	io::Write,
 };
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -26,13 +27,13 @@ impl Display for Input {
 
 		// TODO: handle other modifiers?
 		if modifiers.contains(KeyModifiers::CONTROL) {
-			write!(f, "Ctrl + ")?;
+			write!(f, "Ctrl ")?;
 		}
 		if modifiers.contains(KeyModifiers::ALT) {
-			write!(f, "Alt + ")?;
+			write!(f, "Alt ")?;
 		}
 		if modifiers.contains(KeyModifiers::SHIFT) {
-			write!(f, "Shift + ")?;
+			write!(f, "Shift ")?;
 		}
 
 		match code {
@@ -41,6 +42,45 @@ impl Display for Input {
 			_ => write!(f, "{:?}", code)?,
 		}
 
+		Ok(())
+	}
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct InputBuffer(Vec<Input>);
+
+impl InputBuffer {
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn push(&mut self, i: Input) {
+		self.0.push(i);
+	}
+
+	pub fn clear(&mut self) {
+		self.0.drain(..);
+	}
+}
+
+impl<'a> IntoIterator for &'a InputBuffer {
+	type Item = &'a Input;
+
+	type IntoIter = std::slice::Iter<'a, Input>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.iter()
+	}
+}
+
+impl Display for InputBuffer {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		for (i, input) in self.into_iter().enumerate() {
+			if i != 0 {
+				write!(f, ", ")?;
+			}
+			write!(f, "{}", input)?;
+		}
 		Ok(())
 	}
 }
