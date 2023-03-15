@@ -146,6 +146,7 @@ impl Grid {
 	pub fn delete_row(&mut self, row: usize) -> Change {
 		assert!(row < self.size.y);
 		let old = self.cells.remove(row);
+		self.size.y -= 1;
 		Change::DeleteRow { row, old }
 	}
 
@@ -165,6 +166,7 @@ impl Grid {
 	pub fn delete_col(&mut self, col: usize) -> Change {
 		assert!(col < self.size.x);
 		let old = self.cells.iter_mut().map(|row| row.remove(col)).collect();
+		self.size.x -= 1;
 		Change::DeleteCol { col, old }
 	}
 }
