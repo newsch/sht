@@ -1,20 +1,17 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
-// TODO: adding/removing columns and rows
 // TODO: handle different formats ala xsv
 // TODO: snap edit view to cell location
 // TODO: unify bindings
 // TODO: command palette
-// TODO: display chord options
 // TODO: online help system
 // TODO: interrupt handling
 // TODO: view state in debug view
 // TODO: serialize and dump/reload program state
-// TODO: arbitrarily nested chords
-// TODO: better binding data structure, tree or similar
 // TODO: draw infinite grid,
 // TODO: draw frozen column/row numbers
 // TODO: freeze header
 // TODO: copy/paste
+// TODO: extend binding to include mode switching, counts, type-to-edit cell
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{
@@ -34,6 +31,7 @@ use tui::{
 
 use crate::program::ExternalAction;
 
+mod bindings;
 mod grid;
 mod input;
 mod logger;

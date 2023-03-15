@@ -1,4 +1,5 @@
 use std::{
+	cmp::min,
 	fmt::Display,
 	io,
 	ops::ControlFlow,
@@ -9,14 +10,15 @@ use tui::{
 	backend::Backend,
 	layout::{self, Constraint, Layout, Margin, Rect},
 	style::{Color, Modifier, Style},
-	text::Text,
+	text::{Span, Spans, Text},
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
 };
 
 use crate::{
+	bindings::{BindNode, Bindings},
 	grid::{ChangeTracker, Grid},
-	input::{Bind, Bindings, Input, InputBuffer},
+	input::{Input, InputBuffer},
 	views::{DebugView, Dialog, EditState, EditView, GridState, GridView},
 	XY,
 };
@@ -153,16 +155,16 @@ impl Program {
 
 	fn handle_input_normal(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
 		self.input_buf.push(i);
-		let &action = match self.bindings.get_multiple(&self.input_buf) {
+		let &action = match self.bindings.get(&self.input_buf) {
 			None => {
 				debug!("Unhandled input: {i}");
 				self.input_buf.clear();
 				return Ok(None);
 			}
-			Some(Bind::Partial(_)) => {
+			Some(BindNode::Chord { .. }) => {
 				return Ok(None);
 			}
-			Some(Bind::Action(a)) => a,
+			Some(BindNode::Action(a)) => a,
 		};
 		debug!("{} -> {action:?}", self.input_buf);
 		self.input_buf.clear();
@@ -311,7 +313,52 @@ impl Program {
 
 			use State::*;
 			match &mut self.state {
-				Normal => {}
+				Normal => {
+					// chord options
+					if !self.input_buf.is_empty() {
+						if let Some(b) = self
+							.bindings
+							.get(&self.input_buf)
+							.and_then(|n| n.bindings())
+						{
+							let text: Vec<_> = b
+								.singles()
+								.map(|(input, a)| {
+									Spans::from(vec![
+										Span::styled(
+											input.to_string(),
+											Style::default().add_modifier(Modifier::BOLD),
+										),
+										Span::raw(" "),
+										Span::raw(format!("{a:?}")),
+									])
+								})
+								.collect();
+							let width = min(
+								size.width,
+								text.iter().map(|s| s.width()).max().unwrap_or_default() as u16 + 2,
+							);
+							let height = min(size.height, text.len() as u16 + 2);
+							let bounds = Rect {
+								x: size.right() - width,
+								y: size.bottom() - height,
+								width,
+								height,
+							};
+							f.render_widget(
+								Paragraph::new(text).block(
+									Block::default()
+										.title(Span::styled(
+											format!(" {} ", self.input_buf),
+											Style::default().add_modifier(Modifier::BOLD),
+										))
+										.borders(Borders::ALL),
+								),
+								bounds,
+							);
+						}
+					}
+				}
 				EditCell(editor) => {
 					// draw edit popup
 					let margins = Margin {
