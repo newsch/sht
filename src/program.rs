@@ -16,7 +16,7 @@ use tui::{
 
 use crate::{
 	grid::{ChangeTracker, Grid},
-	input::{Bindings, Input},
+	input::{Bind, Bindings, Input},
 	views::{DebugView, Dialog, EditState, EditView, GridState, GridView},
 	XY,
 };
@@ -78,6 +78,8 @@ pub struct Program {
 	grid: Grid,
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
+	/// Store chorded keys
+	input_buf: Vec<Input>,
 	selection: XY<usize>,
 	bindings: Bindings<Action>,
 	pub should_redraw: bool,
@@ -150,11 +152,29 @@ impl Program {
 	}
 
 	fn handle_input_normal(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
-		let Some(&action) = self.bindings.get(i) else {
-			debug!("Unhandled input: {i:?}");
-			return Ok(None);
+		self.input_buf.push(i);
+		let &action = match self.bindings.get_multiple(&self.input_buf) {
+			None => {
+				debug!("Unhandled input: {i}");
+				self.input_buf.drain(..);
+				return Ok(None);
+			}
+			Some(Bind::Partial(_)) => {
+				return Ok(None);
+			}
+			Some(Bind::Action(a)) => a,
 		};
-		debug!("{i:?} -> {action:?}");
+		if log_enabled!(log::Level::Debug) {
+			let mut chord = String::new();
+			for input in self.input_buf.iter() {
+				if !chord.is_empty() {
+					chord.push_str(", ");
+				}
+				chord.push_str(&input.to_string());
+			}
+			debug!("{chord} -> {action:?}");
+		}
+		self.input_buf.drain(..);
 
 		use Action::*;
 		match action {
@@ -173,6 +193,16 @@ impl Program {
 			Clear => {
 				self.grid
 					.edit(self.selection, String::new())
+					.track(&mut self.change_tracker);
+			}
+			DeleteRow => {
+				self.grid
+					.delete_row(self.selection.y)
+					.track(&mut self.change_tracker);
+			}
+			DeleteCol => {
+				self.grid
+					.delete_col(self.selection.x)
 					.track(&mut self.change_tracker);
 			}
 			Undo => {
@@ -331,12 +361,16 @@ pub enum Action {
 	Replace,
 	/// Clear the current cell
 	Clear,
+	/// Delete column of current cursor
+	DeleteCol,
+	/// Delete row of current cursor
+	DeleteRow,
+	Undo,
+	Redo,
 	/// Write state to original file
 	Write,
 	/// Reload the original file, dropping any unsaved changes
 	Read,
-	Undo,
-	Redo,
 	/// Quit the program
 	Quit,
 	ToggleDebug,

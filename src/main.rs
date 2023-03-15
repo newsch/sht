@@ -7,6 +7,8 @@
 // TODO: interrupt handling
 // TODO: view state in debug view
 // TODO: serialize and dump/reload program state
+// TODO: arbitrarily nested chords
+// TODO: better binding data structure, tree or similar
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{
