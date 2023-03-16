@@ -19,9 +19,14 @@ use crate::{
 	bindings::{BindNode, Bindings},
 	grid::{ChangeTracker, Grid},
 	input::{Input, InputBuffer},
-	views::{DebugView, Dialog, EditState, EditView, GridState, GridView},
+	views::{
+		DebugView, Dialog, EditState, EditView, GridState, GridView, PaletteState, PaletteView,
+	},
 	XY,
 };
+
+mod action;
+pub use action::*;
 
 #[derive(Debug)]
 enum Status {
@@ -76,7 +81,7 @@ impl<'s, 't> Into<Text<'t>> for &'s Status {
 
 #[derive(Default, Debug)]
 pub struct Program {
-	state: State,
+	state: ViewState,
 	grid: Grid,
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
@@ -131,20 +136,30 @@ impl Program {
 
 	pub fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
 		let action = match &mut self.state {
-			State::Normal => self.handle_input_normal(i)?,
-			State::EditCell(state) => {
+			ViewState::Normal => self.handle_input_normal(i)?,
+			ViewState::EditCell(state) => {
 				if let ControlFlow::Break(o) = state.handle_input(i) {
 					if let Some(new_contents) = o {
 						self.grid
 							.edit(self.selection, new_contents)
 							.track(&mut self.change_tracker);
 					}
-					self.state = State::Normal;
+					self.state = ViewState::Normal;
 				}
 				None
 			}
-			State::Debug => {
-				self.state = State::Normal;
+			ViewState::Palette(state) => {
+				if let ControlFlow::Break(o) = state.handle_input(i) {
+					self.state = ViewState::Normal;
+					if let Some(action) = o {
+						self.should_redraw = true;
+						return self.handle_action(action);
+					}
+				}
+				None
+			}
+			ViewState::Debug => {
+				self.state = ViewState::Normal;
 				None
 			}
 		};
@@ -180,11 +195,11 @@ impl Program {
 			Read => self.status_msg = Some(Status::Read(self.filename.to_owned(), self.read())),
 			Move(d) => self.handle_move(d),
 			Edit => {
-				self.state = State::EditCell(EditState::from_str(&self.grid[self.selection]));
+				self.state = ViewState::EditCell(EditState::from_str(&self.grid[self.selection]));
 				self.clear_status();
 			}
 			Replace => {
-				self.state = State::EditCell(EditState::from_str(""));
+				self.state = ViewState::EditCell(EditState::from_str(""));
 				self.clear_status();
 			}
 			Clear => self
@@ -219,8 +234,14 @@ impl Program {
 			}
 			ToggleDebug => {
 				self.state = match self.state {
-					State::Debug => State::Normal,
-					_ => State::Debug,
+					ViewState::Debug => ViewState::Normal,
+					_ => ViewState::Debug,
+				};
+			}
+			TogglePalette => {
+				self.state = match self.state {
+					ViewState::Palette(_) => ViewState::Normal,
+					_ => ViewState::Palette(PaletteState::new(&self.bindings)),
 				};
 			}
 		}
@@ -311,7 +332,7 @@ impl Program {
 			state.select(self.selection);
 			f.render_stateful_widget(GridView::new(&self.grid), inner, &mut state);
 
-			use State::*;
+			use ViewState::*;
 			match &mut self.state {
 				Normal => {
 					// chord options
@@ -375,6 +396,16 @@ impl Program {
 					f.render_stateful_widget(EditView::default(), inner, editor);
 					cursor_pos = Some(editor.cursor(inner));
 				}
+				Palette(state) => {
+					let margins = Margin {
+						horizontal: size.width.saturating_sub(64) / 2,
+						vertical: 0,
+					};
+					let mut size = size.inner(&margins);
+					size.height = min(size.height, 32);
+					f.render_stateful_widget(PaletteView::default(), size, state);
+					cursor_pos = Some(state.cursor(size));
+				}
 				Debug => {
 					let border = Block::default().title("Logs").borders(Borders::ALL);
 					let inner = border.inner(size);
@@ -398,52 +429,12 @@ impl Program {
 }
 
 #[derive(Debug, Clone, Default)]
-enum State {
+enum ViewState {
 	/// Moving around the sheet
 	#[default]
 	Normal,
 	/// Currently editing the selected cell
 	EditCell(EditState),
 	Debug,
-}
-
-pub enum ExternalAction {
-	Quit,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Action {
-	/// Move the cursor
-	Move(Direction),
-	/// Edit the current cell
-	Edit,
-	/// Replace the current cell
-	Replace,
-	/// Clear the current cell
-	Clear,
-	/// Delete column of current cursor
-	DeleteCol,
-	/// Delete row of current cursor
-	DeleteRow,
-	/// Insert column of current cursor
-	InsertCol,
-	/// Insert row of current cursor
-	InsertRow,
-	Undo,
-	Redo,
-	/// Write state to original file
-	Write,
-	/// Reload the original file, dropping any unsaved changes
-	Read,
-	/// Quit the program
-	Quit,
-	ToggleDebug,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Direction {
-	Up,
-	Right,
-	Down,
-	Left,
+	Palette(PaletteState),
 }

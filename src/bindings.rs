@@ -66,6 +66,7 @@ impl Default for Bindings<Action> {
 		s.insert(Input(F(2), none), Edit);
 		s.insert(Input(Enter, none), Replace);
 		s.insert(Input(F(12), none), ToggleDebug);
+		s.insert(Input(F(1), none), TogglePalette);
 
 		let delete = s.create_chord("Delete", &[Input(Char('-'), KeyModifiers::ALT)]);
 		delete.insert(Input(Char('c'), none), DeleteCol);
@@ -111,14 +112,14 @@ impl<A: Debug> Bindings<A> {
 		Some(node)
 	}
 
-	fn insert(&mut self, k: Input, v: A) {
+	pub fn insert(&mut self, k: Input, v: A) {
 		if let Some(n) = self.0.get(&k) {
 			panic!("Input already bound: {k:?} => {n:?}");
 		}
 		self.0.insert(k, BindNode::Action(v));
 	}
 
-	fn create_chord<'a>(
+	pub fn create_chord<'a>(
 		&mut self,
 		name: &str,
 		ks: impl IntoIterator<Item = &'a Input>,
@@ -175,6 +176,11 @@ impl<A: Debug> Bindings<A> {
 
 	pub fn iter(&self) -> impl Iterator<Item = (InputBuffer, &A)> {
 		Iter::new(self)
+	}
+
+	pub fn actions(&self) -> impl Iterator<Item = &A> {
+		// TODO: standalone with fewer allocations
+		Iter::new(self).map(|(_i, a)| a)
 	}
 }
 

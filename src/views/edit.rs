@@ -1,35 +1,72 @@
-use std::{mem, ops::ControlFlow};
+use std::{
+	mem,
+	ops::ControlFlow::{self, *},
+};
 
 use crossterm::event::KeyCode;
 use tui::{layout::Rect, widgets::StatefulWidget};
+use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{input::Input, XY};
+use crate::{bindings::Bindings, input::Input, program::Direction, XY};
 
 use super::Dialog;
 
 #[derive(Default)]
 pub struct EditView();
 
-// TODO: use grapheme clusters instead...
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
+pub enum EditAction {
+	Char(char),
+	Backspace,
+	Delete,
+	Enter,
+	Move(Direction),
+	Cancel,
+	Submit,
+	Jump(Direction),
+}
+
+impl EditAction {
+	pub fn bindings() -> Bindings<Self> {
+		let mut b = Bindings::empty();
+		use EditAction as A;
+		use KeyCode::*;
+
+		b.insert(Esc.into(), A::Cancel);
+		b.insert(Enter.into(), A::Enter);
+		b.insert(Backspace.into(), A::Backspace);
+		b.insert(Delete.into(), A::Delete);
+		b.insert(Left.into(), A::Move(Direction::Left));
+		b.insert(Right.into(), A::Move(Direction::Right));
+		b.insert(Up.into(), A::Move(Direction::Up));
+		b.insert(Down.into(), A::Move(Direction::Down));
+		b.insert(Home.into(), A::Jump(Direction::Left));
+		b.insert(End.into(), A::Jump(Direction::Right));
+
+		b
+	}
+}
+
+// TODO: use chars/grapheme clusters instead...
+#[derive(Default, Debug, Clone)]
 pub struct EditState {
-	buffer: Vec<char>,
+	buffer: String,
 	/// [0, buffer.len()]
 	cursor: usize,
 }
 
 impl EditState {
 	pub fn from_str(s: &str) -> Self {
-		let buffer: Vec<_> = s.chars().collect();
+		let buffer = s.to_string();
 		Self {
 			cursor: buffer.len(),
 			buffer,
 		}
 	}
 
-	/// Iterator of current chars
-	pub fn iter(&self) -> impl Iterator<Item = &char> {
-		self.buffer.iter()
+	/// Reference of the current text being edited
+	pub fn contents(&self) -> &str {
+		&self.buffer
 	}
 
 	/// Remove the character right of the cursor.
@@ -79,7 +116,7 @@ impl EditState {
 
 	/// Remove the contents as a string
 	pub fn take(&mut self) -> String {
-		mem::take(&mut self.buffer).into_iter().collect()
+		mem::take(&mut self.buffer)
 	}
 }
 
@@ -89,14 +126,14 @@ impl StatefulWidget for EditView {
 	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer, state: &mut Self::State) {
 		// TODO: handle overflow w/ ellipses
 		let y = area.y;
-		for (i, c) in state.iter().enumerate() {
+		for (i, c) in state.contents().graphemes(true).enumerate() {
 			if i >= area.width as usize {
 				break;
 			}
 
 			let x = area.x + i as u16;
 			let cell = buf.get_mut(x, y);
-			cell.symbol = String::from(*c);
+			cell.symbol = String::from(c);
 		}
 	}
 }
@@ -115,20 +152,41 @@ impl Dialog for &mut EditState {
 	type Output = Option<String>;
 
 	fn handle_input(self, key: Input) -> ControlFlow<Self::Output> {
+		let bindings = EditAction::bindings();
+		let action = match key {
+			Input(KeyCode::Char(c), ..) => EditAction::Char(c),
+			_ => {
+				let Some(a) = bindings.get_single(key) else {
+					debug!("Unhandled CellEditor input: {key:?}");
+					return Continue(());
+				};
+				*a
+			}
+		};
+
+		self.handle_input(action)
+	}
+}
+
+impl Dialog<EditAction> for &mut EditState {
+	type Output = Option<String>;
+
+	fn handle_input(self, action: EditAction) -> ControlFlow<Self::Output> {
 		use ControlFlow::*;
 
-		use KeyCode::*;
-		match key {
-			Input(Esc, ..) => return Break(None),
-			Input(Enter, ..) => return Break(Some(self.take())),
-			Input(Backspace, ..) => self.pop_char_left(),
-			Input(Delete, ..) => self.pop_char_right(),
-			Input(Left, ..) => self.move_left(),
-			Input(Right, ..) => self.move_right(),
-			Input(Home, ..) => self.move_beginning(),
-			Input(End, ..) => self.move_end(),
-			Input(Char(c), ..) => self.insert_char(c),
-			_ => debug!("Unhandled CellEditor input: {key:?}"),
+		// TODO: multiline
+		use Direction::*;
+		use EditAction::*;
+		match action {
+			Cancel => return Break(None),
+			Submit | Enter => return Break(Some(self.take())),
+			Backspace => self.pop_char_left(),
+			Delete => self.pop_char_right(),
+			Move(Left) => self.move_left(),
+			Move(Right) => self.move_right(),
+			Move(Up) | Jump(Up) | Jump(Left) => self.move_beginning(),
+			Move(Down) | Jump(Down) | Jump(Right) => self.move_end(),
+			Char(c) => self.insert_char(c),
 		}
 
 		return Continue(());

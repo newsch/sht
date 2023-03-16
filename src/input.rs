@@ -28,6 +28,19 @@ impl From<KeyEvent> for Input {
 	}
 }
 
+impl From<KeyCode> for Input {
+	fn from(code: KeyCode) -> Self {
+		Self(code, KeyModifiers::NONE)
+	}
+}
+
+impl From<char> for Input {
+	fn from(c: char) -> Self {
+		// TODO: should this be modifier shift for shift?
+		Self(KeyCode::Char(c), KeyModifiers::NONE)
+	}
+}
+
 impl Display for Input {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let Self(code, modifiers) = self;

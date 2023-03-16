@@ -2,7 +2,6 @@
 // TODO: handle different formats ala xsv
 // TODO: snap edit view to cell location
 // TODO: unify bindings
-// TODO: command palette
 // TODO: online help system
 // TODO: interrupt handling
 // TODO: view state in debug view
