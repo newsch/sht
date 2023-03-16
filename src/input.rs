@@ -5,6 +5,19 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Input(pub KeyCode, pub KeyModifiers);
 
+impl Ord for Input {
+	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.0
+			.partial_cmp(&other.0)
+			.expect("Derived KeyCode partial_ord is actually ord 🤞")
+			.then_with(|| {
+				self.1
+					.partial_cmp(&other.1)
+					.expect("Derived KeyModifier partial_ord is actually ord 🤞")
+			})
+	}
+}
+
 impl From<KeyEvent> for Input {
 	fn from(
 		KeyEvent {
@@ -40,7 +53,7 @@ impl Display for Input {
 	}
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InputBuffer(Vec<Input>);
 
 impl InputBuffer {
@@ -50,6 +63,10 @@ impl InputBuffer {
 
 	pub fn push(&mut self, i: Input) {
 		self.0.push(i);
+	}
+
+	pub fn pop(&mut self) -> Option<Input> {
+		self.0.pop()
 	}
 
 	pub fn clear(&mut self) {
@@ -64,6 +81,30 @@ impl<'a> IntoIterator for &'a InputBuffer {
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.0.iter()
+	}
+}
+
+impl<'a> IntoIterator for InputBuffer {
+	type Item = Input;
+
+	type IntoIter = std::vec::IntoIter<Input>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.into_iter()
+	}
+}
+
+impl Extend<Input> for InputBuffer {
+	fn extend<T: IntoIterator<Item = Input>>(&mut self, iter: T) {
+		self.0.extend(iter);
+	}
+}
+
+impl FromIterator<Input> for InputBuffer {
+	fn from_iter<T: IntoIterator<Item = Input>>(iter: T) -> Self {
+		let mut b = Self::default();
+		b.extend(iter);
+		b
 	}
 }
 

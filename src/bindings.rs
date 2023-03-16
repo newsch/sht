@@ -1,9 +1,12 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+	collections::{hash_map, HashMap},
+	fmt::Debug,
+};
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::{
-	input::Input,
+	input::{Input, InputBuffer},
 	program::{Action, Direction},
 };
 
@@ -169,47 +172,168 @@ impl<A: Debug> Bindings<A> {
 			.iter()
 			.filter_map(|(i, n)| n.action().map(|a| (i, a)))
 	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (InputBuffer, &A)> {
+		Iter::new(self)
+	}
+}
+
+/// Iterator that walks the binding tree in a DFS, yielding each chord's actions before deeper chords
+#[derive(Debug)]
+struct Iter<'a, A> {
+	queue: Vec<(InputBuffer, &'a Bindings<A>)>,
+	current: Option<hash_map::Iter<'a, Input, BindNode<A>>>,
+	buf: InputBuffer,
+}
+
+impl<'a, A> Iter<'a, A> {
+	fn new(b: &'a Bindings<A>) -> Self {
+		Self {
+			current: Some(b.0.iter()),
+			queue: Default::default(),
+			buf: InputBuffer::default(),
+		}
+	}
+}
+
+impl<'a, A: Debug> Iterator for Iter<'a, A> {
+	type Item = (InputBuffer, &'a A);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			let Some(current) = &mut self.current else {
+				let Some((input, bindings)) = self.queue.pop() else {
+					return None;
+				};
+				self.buf.extend(input);
+				self.current = Some(bindings.0.iter());
+				continue;
+			};
+			match current.next() {
+				None => {
+					self.current = None;
+					self.buf.pop();
+					continue;
+				}
+				Some((input, BindNode::Action(action))) => {
+					let mut buf = self.buf.clone();
+					buf.push(*input);
+					return Some((buf, action));
+				}
+				Some((input, BindNode::Chord { bindings, .. })) => {
+					let mut buf = self.buf.clone();
+					buf.push(*input);
+					self.queue.push((buf, bindings));
+					continue;
+				}
+			}
+		}
+	}
 }
 
 #[cfg(test)]
 mod test {
+	use std::collections::{hash_map::RandomState, HashSet};
+
 	use super::*;
 
-	#[test]
-	fn matches_single() {
+	fn example() -> Bindings<usize> {
 		let mut b = Bindings::empty();
-		b.insert(Input(KeyCode::Char('a'), KeyModifiers::NONE), ());
-
-		assert!(b
-			.get_single(Input(KeyCode::Char('a'), KeyModifiers::NONE))
-			.is_some());
-	}
-
-	#[test]
-	fn matches_chord() {
-		let mut b = Bindings::empty();
-		b.insert(Input(KeyCode::Char('a'), KeyModifiers::NONE), ());
+		b.insert(Input(KeyCode::Char('a'), KeyModifiers::NONE), 1);
 		b.insert_chorded(
 			&[
 				Input(KeyCode::Char('b'), KeyModifiers::NONE),
 				Input(KeyCode::Char('c'), KeyModifiers::NONE),
 			],
-			(),
+			2,
+		);
+		b.insert_chorded(
+			&[
+				Input(KeyCode::Char('b'), KeyModifiers::NONE),
+				Input(KeyCode::Char('d'), KeyModifiers::NONE),
+				Input(KeyCode::Char('e'), KeyModifiers::NONE),
+			],
+			3,
 		);
 
-		assert!(b
-			.get_single(Input(KeyCode::Char('a'), KeyModifiers::NONE))
-			.is_some());
+		b
+	}
 
-		assert!(b
-			.get(&[Input(KeyCode::Char('b'), KeyModifiers::NONE),])
-			.is_some());
+	#[test]
+	fn matches_single() {
+		let b = example();
+		assert_eq!(
+			Some(&1),
+			b.get_single(Input(KeyCode::Char('a'), KeyModifiers::NONE))
+		);
+	}
 
-		assert!(b
-			.get(&[
+	#[test]
+	fn matches_chord() {
+		let b = example();
+
+		assert!(matches!(
+			b.get(&[Input(KeyCode::Char('b'), KeyModifiers::NONE)]),
+			Some(&BindNode::Chord { .. })
+		));
+
+		assert_eq!(
+			Some(&2),
+			b.get(&[
 				Input(KeyCode::Char('b'), KeyModifiers::NONE),
-				Input(KeyCode::Char('c'), KeyModifiers::NONE)
+				Input(KeyCode::Char('c'), KeyModifiers::NONE),
 			])
-			.is_some());
+			.and_then(BindNode::action)
+		);
+
+		assert_eq!(
+			Some(&3),
+			b.get(&[
+				Input(KeyCode::Char('b'), KeyModifiers::NONE),
+				Input(KeyCode::Char('d'), KeyModifiers::NONE),
+				Input(KeyCode::Char('e'), KeyModifiers::NONE),
+			])
+			.and_then(BindNode::action)
+		);
+	}
+
+	#[test]
+	fn iters_all() {
+		let b = example();
+		let actions: Vec<_> = b.iter().collect();
+
+		let expected: Vec<(InputBuffer, &usize)> = vec![
+			(
+				[Input(KeyCode::Char('a'), KeyModifiers::NONE)]
+					.into_iter()
+					.collect(),
+				&1,
+			),
+			(
+				[
+					Input(KeyCode::Char('b'), KeyModifiers::NONE),
+					Input(KeyCode::Char('c'), KeyModifiers::NONE),
+				]
+				.into_iter()
+				.collect(),
+				&2,
+			),
+			(
+				[
+					Input(KeyCode::Char('b'), KeyModifiers::NONE),
+					Input(KeyCode::Char('d'), KeyModifiers::NONE),
+					Input(KeyCode::Char('e'), KeyModifiers::NONE),
+				]
+				.into_iter()
+				.collect(),
+				&3,
+			),
+		];
+
+		assert_eq!(expected.len(), actions.len());
+		dbg!(&actions);
+		let expected_set: HashSet<_, RandomState> = HashSet::from_iter(expected);
+		let actions_set: HashSet<_, RandomState> = HashSet::from_iter(actions);
+		assert_eq!(expected_set, actions_set)
 	}
 }
