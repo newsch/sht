@@ -67,12 +67,13 @@ impl Display for Status {
 
 impl<'s, 't> Into<Text<'t>> for &'s Status {
 	fn into(self) -> Text<'t> {
+		let base = Style::default().add_modifier(Modifier::ITALIC);
 		Text::styled(
 			self.to_string(),
 			if self.is_err() {
-				styles::error()
+				base.patch(styles::error())
 			} else {
-				Style::default()
+				base
 			},
 		)
 	}
@@ -80,7 +81,7 @@ impl<'s, 't> Into<Text<'t>> for &'s Status {
 
 #[derive(Default, Debug)]
 pub struct Program {
-	state: ViewState,
+	view: ViewState,
 	grid: Grid,
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
@@ -134,7 +135,7 @@ impl Program {
 	}
 
 	pub fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
-		let action = match &mut self.state {
+		let action = match &mut self.view {
 			ViewState::Normal => self.handle_input_normal(i)?,
 			ViewState::EditCell(state) => {
 				if let ControlFlow::Break(o) = state.handle_input(i) {
@@ -143,13 +144,13 @@ impl Program {
 							.edit(self.selection, new_contents)
 							.track(&mut self.change_tracker);
 					}
-					self.state = ViewState::Normal;
+					self.view = ViewState::Normal;
 				}
 				None
 			}
 			ViewState::Palette(state) => {
 				if let ControlFlow::Break(o) = state.handle_input(i) {
-					self.state = ViewState::Normal;
+					self.view = ViewState::Normal;
 					if let Some(action) = o {
 						self.should_redraw = true;
 						return self.handle_action(action);
@@ -158,7 +159,7 @@ impl Program {
 				None
 			}
 			ViewState::Debug => {
-				self.state = ViewState::Normal;
+				self.view = ViewState::Normal;
 				None
 			}
 		};
@@ -194,11 +195,11 @@ impl Program {
 			Read => self.status_msg = Some(Status::Read(self.filename.to_owned(), self.read())),
 			Move(d) => self.handle_move(d),
 			Edit => {
-				self.state = ViewState::EditCell(EditState::from_str(&self.grid[self.selection]));
+				self.view = ViewState::EditCell(EditState::from_str(&self.grid[self.selection]));
 				self.clear_status();
 			}
 			Replace => {
-				self.state = ViewState::EditCell(EditState::from_str(""));
+				self.view = ViewState::EditCell(EditState::from_str(""));
 				self.clear_status();
 			}
 			Clear => self
@@ -232,13 +233,13 @@ impl Program {
 				}
 			}
 			ToggleDebug => {
-				self.state = match self.state {
+				self.view = match self.view {
 					ViewState::Debug => ViewState::Normal,
 					_ => ViewState::Debug,
 				};
 			}
 			TogglePalette => {
-				self.state = match self.state {
+				self.view = match self.view {
 					ViewState::Palette(_) => ViewState::Normal,
 					_ => ViewState::Palette(PaletteState::new(&self.bindings)),
 				};
@@ -288,7 +289,9 @@ impl Program {
 
 			// status bar
 			{
-				let style = Style::default().add_modifier(Modifier::REVERSED);
+				let status_style = Style::default()
+					.add_modifier(Modifier::REVERSED)
+					.add_modifier(Modifier::BOLD);
 				let chord_msg = (!self.input_buf.is_empty())
 					.then(|| format!("Chord: <{}> ", self.input_buf))
 					.unwrap_or_default();
@@ -302,38 +305,50 @@ impl Program {
 					self.grid.size().y
 				);
 
-				let [status, state]: [Rect; 2] = Layout::default()
+				let [mode, status, state]: [Rect; 3] = Layout::default()
 					.direction(layout::Direction::Horizontal)
+					// TODO: just draw all of background and use margins/spacers
+					// .horizontal_margin(1)
 					.constraints([
+						Constraint::Length(6),
 						Constraint::Min(0),
-						Constraint::Length(state_msg.len() as u16),
+						Constraint::Length(state_msg.len() as u16 + 1),
 					])
 					.split(info)
 					.try_into()
 					.unwrap();
+
+				let mode_msg = match self.view {
+					Normal => " VIEW ",
+					EditCell(_) => " EDIT ",
+					Debug => " DBUG ",
+					Palette(_) => " CMDP ",
+					_ => "      ",
+				};
+				assert!(mode_msg.len() == mode.width as usize);
+				f.render_widget(Paragraph::new(mode_msg).style(status_style), mode);
+
 				if let Some(s) = &self.status_msg {
-					f.render_widget(Paragraph::new(s).style(style), status);
+					f.render_widget(Paragraph::new(s).style(status_style), status);
 				} else {
-					f.render_widget(Paragraph::new("").style(style), status);
+					f.render_widget(
+						Paragraph::new(self.filename.to_string_lossy()).style(status_style),
+						status,
+					);
 				}
-				f.render_widget(Paragraph::new(state_msg).style(style), state);
+				f.render_widget(Paragraph::new(state_msg).style(status_style), state);
 			}
 
 			let size = main;
 
 			// sheet
-			let block = Block::default()
-				.title(self.filename.to_str().unwrap_or_default())
-				.borders(Borders::ALL);
-			let inner = block.inner(size);
-			f.render_widget(block, size);
 			// TODO: save to keep scrolling behavior
 			let mut grid_state = GridState::default();
 			grid_state.select(self.selection);
-			f.render_stateful_widget(GridView::new(&self.grid), inner, &mut grid_state);
+			f.render_stateful_widget(GridView::new(&self.grid), size, &mut grid_state);
 
 			use ViewState::*;
-			match &mut self.state {
+			match &mut self.view {
 				Normal => {
 					// chord options
 					if !self.input_buf.is_empty() {
