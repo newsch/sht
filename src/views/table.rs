@@ -3,7 +3,7 @@ use tui::{
 	layout::Rect,
 	style::Style,
 	text::Text,
-	widgets::{StatefulWidget, Widget},
+	widgets::{BorderType, StatefulWidget, Widget},
 };
 
 use crate::{styles, XY};
@@ -23,6 +23,7 @@ pub struct Table<'a> {
 	// heights: &'a [Constraint],
 	/// Space between each column
 	column_spacing: u16,
+	column_border: BorderType,
 	/// Style used to render the selected row
 	highlight_style: Style,
 	// /// Optional header
@@ -38,15 +39,11 @@ impl<'a> Table<'a> {
 			style: Style::default(),
 			// TODO: own this, use index-based method or expose default?
 			widths: &[],
+			column_border: BorderType::Plain,
 			column_spacing: 1,
 			highlight_style: styles::selected(),
 			rows,
 		}
-	}
-
-	pub fn column_spacing(mut self, spacing: u16) -> Self {
-		self.column_spacing = spacing;
-		self
 	}
 
 	pub fn widths(mut self, widths: &'a [u16]) -> Self {
@@ -262,6 +259,15 @@ impl<'a> StatefulWidget for Table<'a> {
 					width: *width,
 					height: row_height,
 				};
+				// draw column border
+				let column_x = cell_area.right();
+				if column_x <= table_row_area.right() {
+					let x = column_x;
+					for y in cell_area.y..cell_area.bottom() {
+						buf.get_mut(x, y)
+							.set_symbol(BorderType::line_symbols(self.column_border).vertical);
+					}
+				}
 				cell_area = cell_area.intersection(table_row_area);
 				render_cell(buf, cell, cell_area);
 				let is_selected = state
