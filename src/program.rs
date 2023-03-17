@@ -109,29 +109,17 @@ impl Program {
 		Ok(s)
 	}
 
-	fn assert_selection_valid(&self) {
-		let sel = self.selection;
-		let size = self.grid.size();
-		assert!(
-			sel.x < size.x && sel.y < size.y,
-			"Selection {sel:?} out of bounds {size:?}"
-		);
-	}
-
 	fn handle_move(&mut self, m: Direction) {
-		self.assert_selection_valid();
 		use Direction::*;
 		let XY { x, y } = self.selection;
-		let size = self.grid.size();
 		let s = match m {
 			Up if y > 0 => XY { x, y: y - 1 },
-			Down if y < size.y - 1 => XY { x, y: y + 1 },
+			Down => XY { x, y: y + 1 },
 			Left if x > 0 => XY { x: x - 1, y },
-			Right if x < size.x - 1 => XY { x: x + 1, y },
+			Right => XY { x: x + 1, y },
 			_ => return,
 		};
 		self.selection = s;
-		self.assert_selection_valid();
 	}
 
 	pub fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
@@ -195,7 +183,11 @@ impl Program {
 			Read => self.status_msg = Some(Status::Read(self.filename.to_owned(), self.read())),
 			Move(d) => self.handle_move(d),
 			Edit => {
-				self.view = ViewState::EditCell(EditState::from_str(&self.grid[self.selection]));
+				self.view = ViewState::EditCell(EditState::from_str(
+					self.grid
+						.get(self.selection)
+						.expect("TODO: edit cells outside of grid"),
+				));
 				self.clear_status();
 			}
 			Replace => {

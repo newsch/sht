@@ -60,7 +60,7 @@ impl<'g> StatefulWidget for GridView<'g> {
 			.map(|l| max(l, 16))
 			.collect::<Vec<_>>();
 
-		let table = table.widths(&constraints);
+		let table = table.with_widths(&constraints);
 
 		StatefulWidget::render(table, area, buf, &mut state.0);
 	}

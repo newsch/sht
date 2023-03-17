@@ -1,7 +1,4 @@
-use std::{
-	io, iter, mem,
-	ops::{Index, IndexMut},
-};
+use std::{io, iter, mem};
 
 use crate::XY;
 
@@ -10,20 +7,6 @@ pub struct Grid {
 	cells: Vec<Vec<String>>,
 	/// Dimensions of cells
 	size: XY<usize>,
-}
-
-impl Index<XY<usize>> for Grid {
-	type Output = String;
-
-	fn index(&self, index: XY<usize>) -> &Self::Output {
-		&self.cells[index.y][index.x]
-	}
-}
-
-impl IndexMut<XY<usize>> for Grid {
-	fn index_mut(&mut self, index: XY<usize>) -> &mut Self::Output {
-		&mut self.cells[index.y][index.x]
-	}
 }
 
 impl Grid {
@@ -58,6 +41,14 @@ impl Grid {
 
 	pub fn size(&self) -> XY<usize> {
 		self.size
+	}
+
+	pub fn get(&self, pos: XY<usize>) -> Option<&String> {
+		self.cells.get(pos.y).and_then(|r| r.get(pos.x))
+	}
+
+	fn get_mut(&mut self, pos: XY<usize>) -> Option<&mut String> {
+		self.cells.get_mut(pos.y).and_then(|r| r.get_mut(pos.x))
 	}
 }
 
@@ -128,7 +119,7 @@ impl Grid {
 	}
 
 	pub fn edit(&mut self, pos: XY<usize>, contents: String) -> Change {
-		let old = mem::replace(&mut self[pos], contents);
+		let old = mem::replace(self.get_mut(pos).unwrap(), contents);
 		Change::Replace { pos, old }
 	}
 

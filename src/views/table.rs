@@ -1,3 +1,5 @@
+use std::iter;
+
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
@@ -46,7 +48,7 @@ impl<'a> Table<'a> {
 		}
 	}
 
-	pub fn widths(mut self, widths: &'a [u16]) -> Self {
+	pub fn with_widths(mut self, widths: &'a [u16]) -> Self {
 		self.widths = widths.as_ref();
 		self
 	}
@@ -61,11 +63,10 @@ impl<'a> Table<'a> {
 		max_height: u16,
 	) -> (usize, usize) {
 		let row_height = 1; // TODO: proper row heights
-		let offset = offset.min(self.rows.len().saturating_sub(1));
 		let mut start = offset;
 		let mut end = offset;
 		let mut height = 0;
-		for _item in self.rows.iter().skip(offset) {
+		loop {
 			if height + row_height > max_height {
 				break;
 			}
@@ -73,7 +74,10 @@ impl<'a> Table<'a> {
 			end += 1;
 		}
 
-		let selected = selected.unwrap_or_default().min(self.rows.len() - 1);
+		let Some(selected) = selected else {
+			return (start, end);
+		};
+
 		while selected >= end {
 			height = height.saturating_add(row_height);
 			end += 1;
@@ -90,7 +94,16 @@ impl<'a> Table<'a> {
 				height = height.saturating_sub(row_height);
 			}
 		}
+
 		(start, end)
+	}
+
+	fn widths(&'a self) -> impl Iterator<Item = &u16> {
+		self.widths.iter().chain(iter::repeat(&DEFAULT_WIDTH))
+	}
+
+	fn width_at(&self, col: usize) -> &u16 {
+		self.widths.get(col).unwrap_or(&DEFAULT_WIDTH)
 	}
 
 	/// [start, end) indices of visible cols.
@@ -102,12 +115,11 @@ impl<'a> Table<'a> {
 		offset: usize,
 		max_width: u16,
 	) -> (usize, usize) {
-		let offset = offset.min(self.widths.len().saturating_sub(1));
 		let mut start = offset;
 		let mut end = offset;
 		let mut width = 0;
 
-		for col_width in self.widths.iter().skip(offset) {
+		for col_width in self.widths().skip(offset) {
 			width += col_width;
 			width += self.column_spacing;
 			end += 1;
@@ -126,26 +138,26 @@ impl<'a> Table<'a> {
 				trace!("Correcting overshot selection");
 				// add additional columns
 				end += 1;
-				width += self.widths[end - 1];
+				width += self.width_at(end - 1);
 				width += self.column_spacing;
 			}
 			if selected == end - 1 {
 				// make sure entire final column is in view
 				while width > max_width {
-					width -= self.widths[start];
+					width -= self.width_at(start);
 					width -= self.column_spacing;
 					start += 1;
 				}
 				if width < max_width {
-					width += self.widths[start];
+					width += self.width_at(start);
 					width += self.column_spacing;
 					end += 1;
 				}
 			} else {
 				// get to end overlapping
-				while width - self.widths[end - 1] > max_width {
+				while width - self.width_at(end - 1) > max_width {
 					// remove trailing ones
-					width -= self.widths[start];
+					width -= self.width_at(start);
 					width -= self.column_spacing;
 					start += 1;
 				}
@@ -154,12 +166,12 @@ impl<'a> Table<'a> {
 			while selected < start {
 				trace!("Correcting undershot selection");
 				start -= 1;
-				width += self.widths[start];
+				width += self.width_at(start);
 				width += self.column_spacing;
 			}
 			while width > max_width {
 				end -= 1;
-				width -= self.widths[end];
+				width -= self.width_at(end);
 				width -= self.column_spacing;
 			}
 		}
@@ -226,13 +238,7 @@ impl<'a> StatefulWidget for Table<'a> {
 		let (col_start, col_end) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
-		for (row_t, table_row) in self
-			.rows
-			.iter()
-			.enumerate()
-			.skip(row_start)
-			.take(row_end - row_start)
-		{
+		for row_t in row_start..row_end {
 			let row_height = 1; // TODO
 			let (row, col) = (area.top() + current_height, area.left());
 			current_height += row_height;
@@ -245,10 +251,8 @@ impl<'a> StatefulWidget for Table<'a> {
 			buf.set_style(table_row_area, self.style);
 			let mut col = col;
 
-			for (col_t, (width, cell)) in self
-				.widths
-				.iter()
-				.zip(table_row.iter())
+			for (col_t, width) in self
+				.widths()
 				.enumerate()
 				.skip(col_start)
 				.take(col_end - col_start)
@@ -269,7 +273,9 @@ impl<'a> StatefulWidget for Table<'a> {
 					}
 				}
 				cell_area = cell_area.intersection(table_row_area);
-				render_cell(buf, cell, cell_area);
+				if let Some(cell) = self.rows.get(row_t).and_then(|r| r.get(col_t)) {
+					render_cell(buf, cell, cell_area);
+				}
 				let is_selected = state
 					.selected
 					.map(|s| s == XY { x: col_t, y: row_t })
