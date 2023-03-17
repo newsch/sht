@@ -9,7 +9,7 @@ use std::{
 use tui::{
 	backend::Backend,
 	layout::{self, Constraint, Layout, Margin, Rect},
-	style::{Color, Modifier, Style},
+	style::{Modifier, Style},
 	text::{Span, Spans, Text},
 	widgets::{Block, Borders, Clear, Paragraph},
 	Terminal,
@@ -19,6 +19,7 @@ use crate::{
 	bindings::{BindNode, Bindings},
 	grid::{ChangeTracker, Grid},
 	input::{Input, InputBuffer},
+	styles,
 	views::{
 		DebugView, Dialog, EditState, EditView, GridState, GridView, PaletteState, PaletteView,
 	},
@@ -66,14 +67,12 @@ impl Display for Status {
 
 impl<'s, 't> Into<Text<'t>> for &'s Status {
 	fn into(self) -> Text<'t> {
-		let style = Style::default();
-
 		Text::styled(
 			self.to_string(),
 			if self.is_err() {
-				style.fg(Color::Red)
+				styles::error()
 			} else {
-				style
+				Style::default()
 			},
 		)
 	}
@@ -346,10 +345,7 @@ impl Program {
 								.singles()
 								.map(|(input, a)| {
 									Spans::from(vec![
-										Span::styled(
-											input.to_string(),
-											Style::default().add_modifier(Modifier::BOLD),
-										),
+										Span::styled(input.to_string(), styles::keybind()),
 										Span::raw(" "),
 										Span::raw(format!("{a:?}")),
 									])
@@ -371,7 +367,7 @@ impl Program {
 									Block::default()
 										.title(Span::styled(
 											format!(" {} ", self.input_buf),
-											Style::default().add_modifier(Modifier::BOLD),
+											styles::keybind(),
 										))
 										.borders(Borders::ALL),
 								),

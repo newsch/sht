@@ -9,11 +9,10 @@ use std::{
 use crossterm::event::{KeyCode, KeyModifiers};
 use enum_iterator;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use strum::{EnumMessage, VariantNames};
+use strum::EnumMessage;
 use tui::{
 	buffer::Buffer,
 	layout::{Alignment, Constraint, Direction::Vertical, Layout, Rect},
-	style::{Color, Modifier, Style},
 	text::{Span, Spans, Text},
 	widgets::{
 		Block, Borders, Clear, List, ListItem, ListState, Paragraph, StatefulWidget, Widget,
@@ -24,7 +23,7 @@ use crate::{
 	bindings::Bindings,
 	input::{Input, InputBuffer},
 	program::Action,
-	XY,
+	styles, XY,
 };
 
 use super::{Dialog, EditState, EditView};
@@ -174,7 +173,7 @@ impl StatefulWidget for PaletteView {
 					ListItem::new(Spans::from(vec![
 						Span::raw(desc),
 						Span::raw(String::from_iter(iter::repeat(' ').take(spacing))),
-						Span::styled(bind, Style::default().add_modifier(Modifier::BOLD)),
+						Span::styled(bind, styles::keybind()),
 					]))
 				})
 				.collect();
@@ -182,19 +181,16 @@ impl StatefulWidget for PaletteView {
 				let mut area = area;
 				area.height = min(area.height, 2);
 				Clear.render(area, buf);
-				Paragraph::new(Text::styled(
-					"No results",
-					Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
-				))
-				.block(block)
-				.alignment(Alignment::Center)
-				.render(area, buf);
+				Paragraph::new(Text::styled("No results", styles::error()))
+					.block(block)
+					.alignment(Alignment::Center)
+					.render(area, buf);
 				return;
 			}
 			let displayed = items.len() as u16;
 			let list = List::new(items)
 				.block(block)
-				.highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+				.highlight_style(styles::selected());
 			area.height = min(area.height, displayed + borders_height);
 			Clear.render(area, buf);
 			StatefulWidget::render(list, area, buf, &mut state.list)

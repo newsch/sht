@@ -1,10 +1,12 @@
 use log::Level;
 use tui::{
 	layout::Rect,
-	style::{Color, Modifier, Style},
+	style::{Modifier, Style},
 	text::{Span, Spans},
 	widgets::{List, ListItem, Paragraph, Widget},
 };
+
+use crate::styles;
 
 // TODO: handle scrolling, include state
 pub struct DebugView;
@@ -12,7 +14,7 @@ pub struct DebugView;
 impl Widget for DebugView {
 	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer) {
 		let level_style = Style::default().add_modifier(Modifier::BOLD);
-		let warn_style = level_style.fg(Color::Red);
+		let warn_style = styles::error();
 
 		let Some(lock) = crate::logger::buffer().map(|b| b.lock().unwrap()) else {
 			let alert = Paragraph::new("Logger not initialized!").style(warn_style);
@@ -44,8 +46,7 @@ impl Widget for DebugView {
 			})
 			.collect();
 
-		let list =
-			List::new(items).highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+		let list = List::new(items).highlight_style(styles::selected());
 		Widget::render(list, area, buf);
 	}
 }

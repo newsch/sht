@@ -1,12 +1,12 @@
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
-	style::{Modifier, Style},
+	style::Style,
 	text::Text,
 	widgets::{StatefulWidget, Widget},
 };
 
-use crate::XY;
+use crate::{styles, XY};
 
 const DEFAULT_WIDTH: u16 = 12;
 
@@ -39,7 +39,7 @@ impl<'a> Table<'a> {
 			// TODO: own this, use index-based method or expose default?
 			widths: &[],
 			column_spacing: 1,
-			highlight_style: Style::default().add_modifier(Modifier::REVERSED),
+			highlight_style: styles::selected(),
 			rows,
 		}
 	}

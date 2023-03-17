@@ -14,7 +14,7 @@
 use std::{error::Error, io, panic, path::PathBuf};
 
 use crossterm::{
-	cursor,
+	cursor::{self, SetCursorStyle},
 	event::{self, Event},
 	execute,
 	terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -40,6 +40,22 @@ mod views;
 use grid::Grid;
 use program::Program;
 
+mod styles {
+	use tui::style::{Color, Modifier, Style};
+
+	pub fn selected() -> Style {
+		Style::default().add_modifier(Modifier::REVERSED)
+	}
+
+	pub fn error() -> Style {
+		Style::default().add_modifier(Modifier::BOLD).fg(Color::Red)
+	}
+
+	pub fn keybind() -> Style {
+		Style::default().add_modifier(Modifier::BOLD)
+	}
+}
+
 #[derive(Debug, StructOpt)]
 struct Opt {
 	#[structopt(parse(from_os_str))]
@@ -58,6 +74,7 @@ fn setup_terminal() -> io::Result<Terminal<impl Backend>> {
 	execute!(
 		stdout,
 		EnterAlternateScreen,
+		SetCursorStyle::BlinkingBlock,
 		// EnableMouseCapture
 	)?;
 	let backend = CrosstermBackend::new(stdout);
@@ -71,6 +88,7 @@ fn teardown_terminal() -> io::Result<()> {
 	execute!(
 		stdout,
 		LeaveAlternateScreen,
+		SetCursorStyle::DefaultUserShape,
 		// DisableMouseCapture,
 		cursor::Show
 	)?;
