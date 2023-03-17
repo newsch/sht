@@ -4,7 +4,7 @@ use std::{
 };
 
 use crossterm::event::KeyCode;
-use tui::{layout::Rect, widgets::StatefulWidget};
+use tui::{layout::Rect, style::Style, widgets::StatefulWidget};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{bindings::Bindings, input::Input, program::Direction, XY};
@@ -12,7 +12,16 @@ use crate::{bindings::Bindings, input::Input, program::Direction, XY};
 use super::Dialog;
 
 #[derive(Default)]
-pub struct EditView();
+pub struct EditView {
+	style: Style,
+}
+
+impl EditView {
+	pub fn style(mut self, style: Style) -> Self {
+		self.style = style;
+		self
+	}
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum EditAction {
@@ -125,16 +134,14 @@ impl StatefulWidget for EditView {
 
 	fn render(self, area: Rect, buf: &mut tui::buffer::Buffer, state: &mut Self::State) {
 		// TODO: handle overflow w/ ellipses
-		let y = area.y;
-		for (i, c) in state.contents().graphemes(true).enumerate() {
-			if i >= area.width as usize {
-				break;
-			}
-
-			let x = area.x + i as u16;
-			let cell = buf.get_mut(x, y);
-			cell.symbol = String::from(c);
-		}
+		buf.set_style(area, self.style);
+		buf.set_stringn(
+			area.x,
+			area.y,
+			state.contents(),
+			area.width as usize,
+			Style::default(),
+		);
 	}
 }
 

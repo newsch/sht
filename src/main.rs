@@ -47,6 +47,10 @@ mod styles {
 		Style::default().add_modifier(Modifier::REVERSED)
 	}
 
+	pub fn grid() -> Style {
+		Style::default().add_modifier(Modifier::UNDERLINED)
+	}
+
 	pub fn error() -> Style {
 		Style::default().add_modifier(Modifier::BOLD).fg(Color::Red)
 	}

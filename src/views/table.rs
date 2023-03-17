@@ -3,7 +3,7 @@ use std::iter;
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
-	style::Style,
+	style::{Color, Modifier, Style},
 	text::Text,
 	widgets::{BorderType, StatefulWidget, Widget},
 };
@@ -26,6 +26,8 @@ pub struct Table<'a> {
 	/// Space between each column
 	column_spacing: u16,
 	column_border: BorderType,
+	even_row_style: Style,
+	odd_row_style: Style,
 	/// Style used to render the selected row
 	highlight_style: Style,
 	// /// Optional header
@@ -38,11 +40,15 @@ pub struct Table<'a> {
 impl<'a> Table<'a> {
 	pub fn new(rows: &'a Vec<Vec<String>>) -> Self {
 		Self {
-			style: Style::default(),
+			style: styles::grid(),
 			// TODO: own this, use index-based method or expose default?
 			widths: &[],
 			column_border: BorderType::Plain,
 			column_spacing: 1,
+			even_row_style: Style::default(),
+			odd_row_style: Style::default(),
+			// odd_row_style: Style::default().bg(Color::Black).fg(Color::White),
+			// odd_row_style: Style::default().add_modifier(Modifier::UNDERLINED),
 			highlight_style: styles::selected(),
 			rows,
 		}
@@ -238,6 +244,7 @@ impl<'a> StatefulWidget for Table<'a> {
 		let (col_start, col_end) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
+
 		for row_t in row_start..row_end {
 			let row_height = 1; // TODO
 			let (row, col) = (area.top() + current_height, area.left());
@@ -248,7 +255,14 @@ impl<'a> StatefulWidget for Table<'a> {
 				width: area.width,
 				height: row_height,
 			};
-			buf.set_style(table_row_area, self.style);
+
+			let row_style = if row_t % 2 == 0 {
+				self.even_row_style
+			} else {
+				self.odd_row_style
+			};
+			buf.set_style(table_row_area, row_style);
+
 			let mut col = col;
 
 			for (col_t, width) in self

@@ -388,7 +388,11 @@ impl Program {
 					// draw edit popup
 					let size = grid_state.selected_area().unwrap();
 					f.render_widget(Clear, size);
-					f.render_stateful_widget(EditView::default(), size, editor);
+					f.render_stateful_widget(
+						EditView::default().style(styles::grid()),
+						size,
+						editor,
+					);
 					cursor_pos = Some(editor.cursor(size));
 				}
 				Palette(state) => {
