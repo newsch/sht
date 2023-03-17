@@ -136,13 +136,13 @@ impl StatefulWidget for PaletteView {
 		// input box
 		{
 			let area = input;
+			Clear.render(area, buf);
 			let block = Block::default()
 				.title("Command Palette")
 				.title_alignment(Alignment::Center)
 				.borders(Borders::ALL);
 			let inner = block.inner(area);
 			block.render(area, buf);
-			Clear.render(inner, buf);
 			EditView::default().render(inner, buf, &mut state.edit);
 		}
 		// search results, highlighted
