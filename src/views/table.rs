@@ -104,12 +104,26 @@ impl<'a> Table<'a> {
 		(start, end)
 	}
 
-	fn widths(&'a self) -> impl Iterator<Item = &u16> {
-		self.widths.iter().chain(iter::repeat(&DEFAULT_WIDTH))
+	fn cell_widths<'s>(&'s self) -> impl Iterator<Item = u16> + 's {
+		self.widths
+			.iter()
+			.map(ToOwned::to_owned)
+			.chain(iter::repeat(DEFAULT_WIDTH))
 	}
 
-	fn width_at(&self, col: usize) -> &u16 {
-		self.widths.get(col).unwrap_or(&DEFAULT_WIDTH)
+	fn col_widths<'s>(&'s self) -> impl Iterator<Item = u16> + 's {
+		self.cell_widths().map(|w| w + self.column_spacing)
+	}
+
+	fn cell_width_at(&self, col: usize) -> u16 {
+		self.widths
+			.get(col)
+			.map(ToOwned::to_owned)
+			.unwrap_or(DEFAULT_WIDTH)
+	}
+
+	fn col_width_at(&self, col: usize) -> u16 {
+		self.widths.get(col).unwrap_or(&DEFAULT_WIDTH) + self.column_spacing
 	}
 
 	/// [start, end) indices of visible cols.
@@ -125,9 +139,8 @@ impl<'a> Table<'a> {
 		let mut end = offset;
 		let mut width = 0;
 
-		for col_width in self.widths().skip(offset) {
+		for col_width in self.col_widths().skip(offset) {
 			width += col_width;
-			width += self.column_spacing;
 			end += 1;
 			if width >= max_width {
 				break;
@@ -144,40 +157,31 @@ impl<'a> Table<'a> {
 				trace!("Correcting overshot selection");
 				// add additional columns
 				end += 1;
-				width += self.width_at(end - 1);
-				width += self.column_spacing;
+				width += self.col_width_at(end - 1);
 			}
-			if selected == end - 1 {
-				// make sure entire final column is in view
-				while width > max_width {
-					width -= self.width_at(start);
-					width -= self.column_spacing;
-					start += 1;
-				}
-				if width < max_width {
-					width += self.width_at(start);
-					width += self.column_spacing;
-					end += 1;
-				}
-			} else {
-				// get to end overlapping
-				while width - self.width_at(end - 1) > max_width {
-					// remove trailing ones
-					width -= self.width_at(start);
-					width -= self.column_spacing;
-					start += 1;
-				}
+			assert!(selected == end - 1); // selection is at right side
+			trace!("Bringing final column into view");
+			// make sure entire selected column is in view
+			while width > max_width {
+				width -= self.col_width_at(start);
+				start += 1;
 			}
+			// include any (maybe partial) right of selected
+			while width < max_width {
+				width += self.col_width_at(end);
+				end += 1;
+			}
+			assert!(width >= max_width);
 		} else if selected < start {
 			while selected < start {
 				trace!("Correcting undershot selection");
 				start -= 1;
-				width += self.width_at(start);
+				width += self.cell_width_at(start);
 				width += self.column_spacing;
 			}
 			while width > max_width {
 				end -= 1;
-				width -= self.width_at(end);
+				width -= self.cell_width_at(end);
 				width -= self.column_spacing;
 			}
 		}
@@ -244,6 +248,7 @@ impl<'a> StatefulWidget for Table<'a> {
 		let (col_start, col_end) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
+		dbg!(col_start, col_end);
 
 		for row_t in row_start..row_end {
 			let row_height = 1; // TODO
@@ -266,7 +271,7 @@ impl<'a> StatefulWidget for Table<'a> {
 			let mut col = col;
 
 			for (col_t, width) in self
-				.widths()
+				.cell_widths()
 				.enumerate()
 				.skip(col_start)
 				.take(col_end - col_start)
@@ -274,7 +279,7 @@ impl<'a> StatefulWidget for Table<'a> {
 				let mut cell_area = Rect {
 					x: col,
 					y: row,
-					width: *width,
+					width,
 					height: row_height,
 				};
 				// draw column border
@@ -298,7 +303,7 @@ impl<'a> StatefulWidget for Table<'a> {
 					buf.set_style(cell_area, self.highlight_style);
 					state.selected_area = Some(cell_area);
 				}
-				col += *width + self.column_spacing;
+				col += width + self.column_spacing;
 			}
 		}
 	}
