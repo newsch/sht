@@ -17,6 +17,10 @@ impl GridState {
 	pub fn select(&mut self, s: XY<usize>) {
 		self.0.select(Some(s));
 	}
+
+	pub fn selected_area(&self) -> Option<Rect> {
+		self.0.selected_area()
+	}
 }
 
 pub struct GridView<'g> {

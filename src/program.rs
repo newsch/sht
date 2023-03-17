@@ -327,9 +327,10 @@ impl Program {
 				.borders(Borders::ALL);
 			let inner = block.inner(size);
 			f.render_widget(block, size);
-			let mut state = GridState::default();
-			state.select(self.selection);
-			f.render_stateful_widget(GridView::new(&self.grid), inner, &mut state);
+			// TODO: save to keep scrolling behavior
+			let mut grid_state = GridState::default();
+			grid_state.select(self.selection);
+			f.render_stateful_widget(GridView::new(&self.grid), inner, &mut grid_state);
 
 			use ViewState::*;
 			match &mut self.state {
@@ -378,19 +379,10 @@ impl Program {
 				}
 				EditCell(editor) => {
 					// draw edit popup
-					let margins = Margin {
-						horizontal: 8,
-						vertical: 10,
-					};
-					let size = size.inner(&margins);
-					let border = Block::default()
-						.title(format!("{:?}", self.selection))
-						.borders(Borders::ALL);
-					let inner = border.inner(size);
+					let size = grid_state.selected_area().unwrap();
 					f.render_widget(Clear, size);
-					f.render_widget(border, size);
-					f.render_stateful_widget(EditView::default(), inner, editor);
-					cursor_pos = Some(editor.cursor(inner));
+					f.render_stateful_widget(EditView::default(), size, editor);
+					cursor_pos = Some(editor.cursor(size));
 				}
 				Palette(state) => {
 					let margins = Margin {

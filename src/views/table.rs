@@ -175,6 +175,7 @@ impl<'a> Table<'a> {
 pub struct TableState {
 	offset: XY<usize>,
 	selected: Option<XY<usize>>,
+	selected_area: Option<Rect>,
 }
 
 impl TableState {
@@ -187,6 +188,11 @@ impl TableState {
 		if index.is_none() {
 			self.offset = Default::default();
 		}
+	}
+
+	/// Retrieve the location and area of the selected cell drawn in the last render
+	pub fn selected_area(&self) -> Option<Rect> {
+		self.selected_area
 	}
 }
 
@@ -264,6 +270,7 @@ impl<'a> StatefulWidget for Table<'a> {
 					.unwrap_or_default();
 				if is_selected {
 					buf.set_style(cell_area, self.highlight_style);
+					state.selected_area = Some(cell_area);
 				}
 				col += *width + self.column_spacing;
 			}
