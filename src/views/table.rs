@@ -1,5 +1,6 @@
 use std::iter;
 
+use serde::{Deserialize, Serialize};
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
@@ -8,7 +9,7 @@ use tui::{
 	widgets::{BorderType, StatefulWidget, Widget},
 };
 
-use crate::{styles, XY};
+use crate::{styles, Rect as MyRect, XY};
 
 const DEFAULT_WIDTH: u16 = 12;
 
@@ -188,16 +189,17 @@ impl<'a> Table<'a> {
 				width -= self.column_spacing;
 			}
 		}
+		trace!("Using {:?}", (start, end));
 		assert!(selected >= start && selected < end);
 		(start, end)
 	}
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TableState {
 	offset: XY<usize>,
 	selected: Option<XY<usize>>,
-	selected_area: Option<Rect>,
+	selected_area: Option<MyRect>,
 }
 
 impl TableState {
@@ -214,14 +216,14 @@ impl TableState {
 
 	/// Retrieve the location and area of the selected cell drawn in the last render
 	pub fn selected_area(&self) -> Option<Rect> {
-		self.selected_area
+		self.selected_area.map(Into::into)
 	}
 }
 
 impl<'a> StatefulWidget for Table<'a> {
 	type State = TableState;
 
-	fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+	fn render(self, area: tui::layout::Rect, buf: &mut Buffer, state: &mut Self::State) {
 		if let Some(r) = self.rows.first() {
 			let width = r.len();
 			assert!(self.widths.len() == width);
@@ -298,7 +300,7 @@ impl<'a> StatefulWidget for Table<'a> {
 					.unwrap_or_default();
 				if is_selected {
 					buf.set_style(cell_area, self.highlight_style);
-					state.selected_area = Some(cell_area);
+					state.selected_area = Some(cell_area.into());
 				}
 				col += width + self.column_spacing;
 			}

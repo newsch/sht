@@ -2,7 +2,9 @@ use std::{io, iter, mem};
 
 use crate::XY;
 
-#[derive(Default, Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Grid {
 	cells: Vec<Vec<String>>,
 	/// Dimensions of cells
@@ -52,7 +54,7 @@ impl Grid {
 	}
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ChangeTracker {
 	undos: Vec<Change>,
 	redos: Vec<Change>,
@@ -83,7 +85,7 @@ impl ChangeTracker {
 /// Record of an edit to a `Grid` that contains enough information to
 /// reconstruct the previous version with the current.
 #[must_use = "Changes must be recorded to correctly track history"]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Change {
 	Replace { pos: XY<usize>, old: String },
 	ReplaceGrid { old: Grid },

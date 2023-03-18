@@ -1,5 +1,6 @@
 use std::cmp::max;
 
+use serde::{Deserialize, Serialize};
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
@@ -10,7 +11,7 @@ use crate::{Grid, XY};
 
 use super::{Table, TableState};
 
-#[derive(Default)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct GridState(TableState);
 
 impl GridState {
@@ -57,7 +58,7 @@ impl<'g> StatefulWidget for GridView<'g> {
 			})
 			.into_iter()
 			.map(|l| l.try_into().expect("assume cell width less that u16 max"))
-			.map(|l| max(l, 16))
+			// .map(|l| max(l, 16))
 			.collect::<Vec<_>>();
 
 		let table = table.with_widths(&constraints);

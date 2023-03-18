@@ -4,6 +4,7 @@ use std::{
 };
 
 use crossterm::event::KeyCode;
+use serde::{Deserialize, Serialize};
 use tui::{layout::Rect, style::Style, widgets::StatefulWidget};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -23,7 +24,7 @@ impl EditView {
 	}
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub enum EditAction {
 	Char(char),
 	Backspace,
@@ -57,7 +58,7 @@ impl EditAction {
 }
 
 // TODO: use chars/grapheme clusters instead...
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct EditState {
 	buffer: String,
 	/// [0, buffer.len()]

@@ -11,7 +11,15 @@
 // TODO: freeze header
 // TODO: copy/paste
 // TODO: extend binding to include mode switching, counts, type-to-edit cell
-use std::{error::Error, io, panic, path::PathBuf};
+use std::{
+	env,
+	error::Error,
+	fs::File,
+	io, panic,
+	path::PathBuf,
+	sync::Mutex,
+	time::{self, Instant},
+};
 
 use crossterm::{
 	cursor::{self, SetCursorStyle},
@@ -22,6 +30,7 @@ use crossterm::{
 
 #[macro_use]
 extern crate log;
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use tui::{
 	backend::{Backend, CrosstermBackend},
@@ -66,10 +75,52 @@ struct Opt {
 	file: PathBuf,
 }
 
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct XY<T> {
 	x: T,
 	y: T,
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Rect {
+	pub x: u16,
+	pub y: u16,
+	pub width: u16,
+	pub height: u16,
+}
+
+impl Into<tui::layout::Rect> for Rect {
+	fn into(self) -> tui::layout::Rect {
+		let Self {
+			x,
+			y,
+			width,
+			height,
+		} = self;
+		tui::layout::Rect {
+			x,
+			y,
+			width,
+			height,
+		}
+	}
+}
+
+impl From<tui::layout::Rect> for Rect {
+	fn from(value: tui::layout::Rect) -> Self {
+		let tui::layout::Rect {
+			x,
+			y,
+			width,
+			height,
+		} = value;
+		Self {
+			x,
+			y,
+			width,
+			height,
+		}
+	}
 }
 
 fn setup_terminal() -> io::Result<Terminal<impl Backend>> {
@@ -103,10 +154,38 @@ fn main() -> Result<(), Box<dyn Error>> {
 	logger::init();
 	info!("Starting");
 
-	let opt = Opt::from_args();
+	let program = if let Ok(state_path) = env::var("FROM_STATE") {
+		let f = File::open(state_path)?;
+		serde_json::from_reader(f)?
+	} else {
+		let opt = Opt::from_args();
+		Program::from_path(opt.file)?
+	};
 
-	let mut terminal = setup_terminal()?;
+	let program = Mutex::new(program);
 
+	match panic::catch_unwind(|| {
+		let mut program = program.lock().unwrap();
+		run(&mut *program)
+	}) {
+		Ok(r) => r?,
+		Err(panic) => {
+			let program = program.lock().map_or_else(|e| e.into_inner(), |l| l);
+			match write_state_to_temp(&program) {
+				Ok(path) => eprintln!("Captured program state at {path:?}"),
+				Err(e) => eprintln!("Error writing captured state: {e}"),
+			}
+			panic::resume_unwind(panic);
+		}
+	}
+
+	info!("Stopping");
+	teardown_terminal()?;
+
+	Ok(())
+}
+
+fn run(program: &mut Program) -> Result<(), Box<dyn Error>> {
 	// reset terminal on panic
 	let default_panic = panic::take_hook();
 	panic::set_hook(Box::new(move |info| {
@@ -117,9 +196,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 		default_panic(info);
 	}));
 
-	let mut program = Program::from_path(opt.file)?;
+	let terminal = &mut setup_terminal()?;
 
-	program.draw(&mut terminal)?;
+	program.draw(terminal)?;
 
 	loop {
 		let event = event::read()?;
@@ -127,7 +206,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 		let k = match event {
 			Event::Key(k) => k,
 			Event::Resize(..) => {
-				program.draw(&mut terminal)?;
+				program.draw(terminal)?;
 				continue;
 			}
 			e => {
@@ -143,12 +222,20 @@ fn main() -> Result<(), Box<dyn Error>> {
 		}
 
 		if program.should_redraw {
-			program.draw(&mut terminal)?;
+			program.draw(terminal)?;
 		}
 	}
-
-	info!("Stopping");
-	teardown_terminal()?;
-
 	Ok(())
+}
+
+fn write_state_to_temp(p: &Program) -> io::Result<PathBuf> {
+	let now = time::SystemTime::now()
+		.duration_since(time::UNIX_EPOCH)
+		.unwrap()
+		.as_millis();
+	let mut path = env::temp_dir();
+	path.push(format!("sht_state_{now}.json"));
+	let f = File::create(&path)?;
+	serde_json::to_writer(f, p)?;
+	Ok(path)
 }

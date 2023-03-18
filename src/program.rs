@@ -6,6 +6,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
+use serde::{Deserialize, Serialize};
 use tui::{
 	backend::Backend,
 	layout::{self, Constraint, Layout, Margin, Rect},
@@ -29,12 +30,22 @@ use crate::{
 mod action;
 pub use action::*;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Status {
-	Read(PathBuf, io::Result<()>),
-	Write(PathBuf, io::Result<()>),
+	Read(
+		PathBuf,
+		#[serde(skip, default = "default_io_result")] io::Result<()>,
+	),
+	Write(
+		PathBuf,
+		#[serde(skip, default = "default_io_result")] io::Result<()>,
+	),
 	UndoLimit,
 	RedoLimit,
+}
+
+fn default_io_result() -> io::Result<()> {
+	Ok(())
 }
 
 impl Status {
@@ -79,7 +90,7 @@ impl<'s, 't> Into<Text<'t>> for &'s Status {
 	}
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Program {
 	view: ViewState,
 	grid: Grid,
@@ -427,7 +438,7 @@ impl Program {
 	}
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 enum ViewState {
 	/// Moving around the sheet
 	#[default]

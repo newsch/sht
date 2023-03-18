@@ -4,6 +4,8 @@ use std::{
 };
 
 use crossterm::event::{KeyCode, KeyModifiers};
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 use crate::{
 	input::{Input, InputBuffer},
@@ -12,7 +14,7 @@ use crate::{
 
 type BindMap<A> = HashMap<Input, BindNode<A>>;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum BindNode<A> {
 	Action(A),
 	Chord { name: String, bindings: Bindings<A> },
@@ -36,6 +38,34 @@ impl<A> BindNode<A> {
 
 #[derive(Debug)]
 pub struct Bindings<A>(BindMap<A>);
+
+impl<A> Serialize for Bindings<A>
+where
+	A: Serialize,
+{
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: serde::Serializer,
+	{
+		let list: Vec<_> = self.0.iter().collect();
+		list.serialize(serializer)
+	}
+}
+
+impl<'de, A> Deserialize<'de> for Bindings<A>
+where
+	A: Deserialize<'de>,
+{
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+	where
+		D: serde::Deserializer<'de>,
+	{
+		let list = Vec::<(Input, BindNode<A>)>::deserialize(deserializer)?;
+		let mut value = HashMap::new();
+		value.extend(list.into_iter());
+		Ok(Bindings(value))
+	}
+}
 
 impl Default for Bindings<Action> {
 	fn default() -> Self {
@@ -337,7 +367,6 @@ mod test {
 		];
 
 		assert_eq!(expected.len(), actions.len());
-		dbg!(&actions);
 		let expected_set: HashSet<_, RandomState> = HashSet::from_iter(expected);
 		let actions_set: HashSet<_, RandomState> = HashSet::from_iter(actions);
 		assert_eq!(expected_set, actions_set)

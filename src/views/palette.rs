@@ -9,6 +9,7 @@ use std::{
 use crossterm::event::{KeyCode, KeyModifiers};
 use enum_iterator;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use serde::{Deserialize, Serialize};
 use strum::EnumMessage;
 use tui::{
 	buffer::Buffer,
@@ -30,10 +31,11 @@ use super::{Dialog, EditState, EditView};
 
 type Item = (Option<InputBuffer>, Action);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaletteState {
 	items: Vec<Item>,
 	edit: EditState,
+	#[serde(skip)]
 	list: ListState,
 }
 

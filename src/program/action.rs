@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use enum_iterator::Sequence;
+use serde::{Deserialize, Serialize};
 use strum::{EnumMessage, IntoStaticStr};
 
 pub enum ExternalAction {
@@ -8,7 +9,19 @@ pub enum ExternalAction {
 }
 
 #[derive(
-	Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Sequence, EnumMessage, IntoStaticStr,
+	Debug,
+	Copy,
+	Clone,
+	PartialEq,
+	Eq,
+	PartialOrd,
+	Ord,
+	Hash,
+	Sequence,
+	EnumMessage,
+	IntoStaticStr,
+	Serialize,
+	Deserialize,
 )]
 pub enum Action {
 	/// Move the cursor
@@ -60,7 +73,9 @@ impl<'a> Display for Doc<'a> {
 	}
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Sequence)]
+#[derive(
+	Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Sequence, Serialize, Deserialize,
+)]
 pub enum Direction {
 	Down,
 	Left,

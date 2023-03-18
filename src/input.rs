@@ -1,8 +1,9 @@
 use std::fmt::{Debug, Display};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Input(pub KeyCode, pub KeyModifiers);
 
 impl Ord for Input {
@@ -66,7 +67,7 @@ impl Display for Input {
 	}
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct InputBuffer(Vec<Input>);
 
 impl InputBuffer {
