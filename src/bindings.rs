@@ -5,7 +5,6 @@ use std::{
 
 use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 
 use crate::{
 	input::{Input, InputBuffer},

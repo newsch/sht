@@ -18,7 +18,7 @@ use std::{
 	io, panic,
 	path::PathBuf,
 	sync::Mutex,
-	time::{self, Instant},
+	time::{self},
 };
 
 use crossterm::{

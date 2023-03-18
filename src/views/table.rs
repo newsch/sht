@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
-	style::{Color, Modifier, Style},
+	style::Style,
 	text::Text,
 	widgets::{BorderType, StatefulWidget, Widget},
 };

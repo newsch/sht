@@ -6,7 +6,6 @@ use std::{
 use crossterm::event::KeyCode;
 use serde::{Deserialize, Serialize};
 use tui::{layout::Rect, style::Style, widgets::StatefulWidget};
-use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{bindings::Bindings, input::Input, program::Direction, XY};
 
