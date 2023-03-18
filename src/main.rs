@@ -1,25 +1,14 @@
 //! A "simple" and straightforward terminal spreadsheet editor, in the spirit of nano and htop.
 // TODO: handle different formats ala xsv
-// TODO: snap edit view to cell location
 // TODO: unify bindings
 // TODO: online help system
 // TODO: interrupt handling
 // TODO: view state in debug view
-// TODO: serialize and dump/reload program state
-// TODO: draw infinite grid,
 // TODO: draw frozen column/row numbers
 // TODO: freeze header
 // TODO: copy/paste
 // TODO: extend binding to include mode switching, counts, type-to-edit cell
-use std::{
-	env,
-	error::Error,
-	fs::File,
-	io, panic,
-	path::PathBuf,
-	sync::Mutex,
-	time::{self},
-};
+use std::{env, error::Error, fs::File, io, panic, path::PathBuf, sync::Mutex, time};
 
 use crossterm::{
 	cursor::{self, SetCursorStyle},
