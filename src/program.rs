@@ -42,10 +42,11 @@ enum Status {
 	),
 	UndoLimit,
 	RedoLimit,
+	DumpState(#[serde(skip, default = "default_io_result")] io::Result<PathBuf>),
 }
 
-fn default_io_result() -> io::Result<()> {
-	Ok(())
+fn default_io_result<T: Default>() -> io::Result<T> {
+	Ok(Default::default())
 }
 
 impl Status {
@@ -53,6 +54,7 @@ impl Status {
 		Some(match self {
 			Status::Read(.., Err(e)) => e,
 			Status::Write(.., Err(e)) => e,
+			Status::DumpState(Err(e)) => e,
 			_ => return None,
 		})
 	}
@@ -71,6 +73,8 @@ impl Display for Status {
 			Status::Write(p, Err(e)) => write!(f, "Error writing to {p:?}: {e}")?,
 			Status::UndoLimit => write!(f, "Nothing left to undo")?,
 			Status::RedoLimit => write!(f, "Nothing left to redo")?,
+			Status::DumpState(Ok(p)) => write!(f, "Dumped state to {p:?}")?,
+			Status::DumpState(Err(e)) => write!(f, "Error dumping state: {e}")?,
 		}
 		Ok(())
 	}
@@ -192,7 +196,10 @@ impl Program {
 		match action {
 			Quit => return Ok(Some(ExternalAction::Quit)),
 			Write => self.set_status(Status::Write(self.filename.to_owned(), self.write())),
-			Read => self.status_msg = Some(Status::Read(self.filename.to_owned(), self.read())),
+			Read => {
+				let result = self.read();
+				self.set_status(Status::Read(self.filename.to_owned(), result));
+			}
 			Move(d) => self.handle_move(d),
 			Edit => {
 				self.view = ViewState::EditCell(EditState::from_str(
@@ -248,6 +255,7 @@ impl Program {
 					_ => ViewState::Palette(PaletteState::new(&self.bindings)),
 				};
 			}
+			DumpState => self.set_status(Status::DumpState(crate::write_state_to_temp(self))),
 		}
 		Ok(None)
 	}
@@ -327,7 +335,6 @@ impl Program {
 					EditCell(_) => " EDIT ",
 					Debug => " DBUG ",
 					Palette(_) => " CMDP ",
-					_ => "      ",
 				};
 				assert!(mode_msg.len() == mode.width as usize);
 				f.render_widget(Paragraph::new(mode_msg).style(status_style), mode);

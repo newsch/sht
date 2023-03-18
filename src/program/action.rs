@@ -49,6 +49,7 @@ pub enum Action {
 	/// Quit the program
 	Quit,
 	ToggleDebug,
+	DumpState,
 	TogglePalette,
 }
 

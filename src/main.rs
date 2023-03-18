@@ -155,6 +155,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 	info!("Starting");
 
 	let program = if let Ok(state_path) = env::var("FROM_STATE") {
+		info!("Loading program state from {state_path:?}");
 		let f = File::open(state_path)?;
 		serde_json::from_reader(f)?
 	} else {
