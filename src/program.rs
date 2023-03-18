@@ -83,6 +83,7 @@ impl<'s, 't> Into<Text<'t>> for &'s Status {
 pub struct Program {
 	view: ViewState,
 	grid: Grid,
+	grid_state: GridState,
 	change_tracker: ChangeTracker,
 	filename: PathBuf,
 	/// Store chorded keys
@@ -335,9 +336,8 @@ impl Program {
 
 			// sheet
 			// TODO: save to keep scrolling behavior
-			let mut grid_state = GridState::default();
-			grid_state.select(self.selection);
-			f.render_stateful_widget(GridView::new(&self.grid), size, &mut grid_state);
+			self.grid_state.select(self.selection);
+			f.render_stateful_widget(GridView::new(&self.grid), size, &mut self.grid_state);
 
 			use ViewState::*;
 			match &mut self.view {
@@ -386,7 +386,7 @@ impl Program {
 				}
 				EditCell(editor) => {
 					// draw edit popup
-					let size = grid_state.selected_area().unwrap();
+					let size = self.grid_state.selected_area().unwrap();
 					f.render_widget(Clear, size);
 					f.render_stateful_widget(
 						EditView::default().style(styles::grid()),

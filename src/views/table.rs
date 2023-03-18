@@ -148,11 +148,12 @@ impl<'a> Table<'a> {
 		}
 
 		let Some(selected) = selected else {
+			trace!("No selection; using {:?}", (start, end));
 			return (start, end);
 		};
 
 		// bring selection into view (changing offset)
-		if selected >= end {
+		if selected >= end - 1 {
 			while selected >= end {
 				trace!("Correcting overshot selection");
 				// add additional columns
@@ -163,11 +164,13 @@ impl<'a> Table<'a> {
 			trace!("Bringing final column into view");
 			// make sure entire selected column is in view
 			while width > max_width {
+				trace!("Shifting start right");
 				width -= self.col_width_at(start);
 				start += 1;
 			}
 			// include any (maybe partial) right of selected
 			while width < max_width {
+				trace!("Shifting end right");
 				width += self.col_width_at(end);
 				end += 1;
 			}
@@ -221,12 +224,7 @@ impl<'a> StatefulWidget for Table<'a> {
 	fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
 		if let Some(r) = self.rows.first() {
 			let width = r.len();
-			let height = self.rows.len();
 			assert!(self.widths.len() == width);
-			assert!(state.offset.x < width);
-			assert!(state.offset.y < height);
-			assert!(state.offset.x < width);
-			assert!(state.offset.y < height);
 		}
 		// TODO: handle constraining/reseting
 		if area.area() == 0 {
@@ -248,7 +246,6 @@ impl<'a> StatefulWidget for Table<'a> {
 		let (col_start, col_end) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
-		dbg!(col_start, col_end);
 
 		for row_t in row_start..row_end {
 			let row_height = 1; // TODO
@@ -284,7 +281,7 @@ impl<'a> StatefulWidget for Table<'a> {
 				};
 				// draw column border
 				let column_x = cell_area.right();
-				if column_x <= table_row_area.right() {
+				if column_x < table_row_area.right() {
 					let x = column_x;
 					for y in cell_area.y..cell_area.bottom() {
 						buf.get_mut(x, y)
