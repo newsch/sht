@@ -180,13 +180,13 @@ impl<'a> Table<'a> {
 			while selected < start {
 				trace!("Correcting undershot selection");
 				start -= 1;
-				width += self.cell_width_at(start);
-				width += self.column_spacing;
+				width += self.col_width_at(start);
 			}
-			while width > max_width {
+			assert!(selected == start);
+			while end > 0 && width.saturating_sub(self.col_width_at(end - 1)) > max_width {
+				trace!("Shifting end left");
+				width -= self.col_width_at(end - 1);
 				end -= 1;
-				width -= self.cell_width_at(end);
-				width -= self.column_spacing;
 			}
 		}
 		trace!("Using {:?}", (start, end));
