@@ -52,6 +52,10 @@ impl Grid {
 	fn get_mut(&mut self, pos: XY<usize>) -> Option<&mut String> {
 		self.cells.get_mut(pos.y).and_then(|r| r.get_mut(pos.x))
 	}
+
+	pub fn is_in(&self, pos: XY<usize>) -> bool {
+		pos.x < self.size.x && pos.y < self.size.y
+	}
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

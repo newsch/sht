@@ -26,6 +26,14 @@ pub enum ExternalAction {
 pub enum Action {
 	/// Move the cursor
 	Move(Direction),
+	Jump(Direction),
+	GoTo,
+	Home,
+	End,
+	HomeCol,
+	EndCol,
+	HomeRow,
+	EndRow,
 	/// Edit the current cell
 	Edit,
 	/// Replace the current cell

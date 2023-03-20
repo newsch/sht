@@ -201,6 +201,29 @@ impl Program {
 				self.set_status(Status::Read(self.filename.to_owned(), result));
 			}
 			Move(d) => self.handle_move(d),
+			Jump(d) => todo!(), // store displayed grid size for jumping
+			Home => {
+				self.selection = XY { x: 0, y: 0 };
+			}
+			End => {
+				let XY { x, y } = self.grid.size();
+				let x = x.saturating_sub(1);
+				let y = y.saturating_sub(1);
+				self.selection = XY { x, y };
+			}
+			HomeRow => {
+				self.selection.x = 0;
+			}
+			EndRow => {
+				self.selection.x = self.grid.size().x.saturating_sub(1);
+			}
+			HomeCol => {
+				self.selection.y = 0;
+			}
+			EndCol => {
+				self.selection.y = self.grid.size().y.saturating_sub(1);
+			}
+			GoTo => todo!(), // dialog
 			Edit => {
 				self.view = ViewState::EditCell(EditState::from_str(
 					self.grid

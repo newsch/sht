@@ -68,42 +68,57 @@ where
 
 impl Default for Bindings<Action> {
 	fn default() -> Self {
-		use Action::*;
+		use Action as A;
 		use KeyCode::*;
 		let none = KeyModifiers::empty();
 
 		let mut s = Self::empty();
 
 		// movement
-		s.insert(Input(Up, none), Move(Direction::Up));
-		s.insert(Input(Down, none), Move(Direction::Down));
-		s.insert(Input(Left, none), Move(Direction::Left));
-		s.insert(Input(Right, none), Move(Direction::Right));
-		s.insert(Input(Tab, none), Move(Direction::Right));
-		s.insert(Input(Char('k'), none), Move(Direction::Up));
-		s.insert(Input(Char('j'), none), Move(Direction::Down));
-		s.insert(Input(Char('h'), none), Move(Direction::Left));
-		s.insert(Input(Char('l'), none), Move(Direction::Right));
+		s.insert(Input(Up, none), A::Move(Direction::Up));
+		s.insert(Input(Down, none), A::Move(Direction::Down));
+		s.insert(Input(Left, none), A::Move(Direction::Left));
+		s.insert(Input(Right, none), A::Move(Direction::Right));
+		s.insert(Input(Tab, none), A::Move(Direction::Right));
+		s.insert(Input(Char('k'), none), A::Move(Direction::Up));
+		s.insert(Input(Char('j'), none), A::Move(Direction::Down));
+		s.insert(Input(Char('h'), none), A::Move(Direction::Left));
+		s.insert(Input(Char('l'), none), A::Move(Direction::Right));
+		s.insert(Input(Home, KeyModifiers::CONTROL), A::Home);
+		s.insert(Input(End, KeyModifiers::CONTROL), A::End);
+		s.insert(Input(Home, none), A::HomeRow);
+		s.insert(Input(End, none), A::EndRow);
+		s.insert(Input(PageUp, none), A::Jump(Direction::Up));
+		s.insert(Input(PageDown, none), A::Jump(Direction::Down));
+		s.insert(
+			Input(PageUp, KeyModifiers::CONTROL),
+			A::Jump(Direction::Left),
+		);
+		s.insert(
+			Input(PageDown, KeyModifiers::CONTROL),
+			A::Jump(Direction::Right),
+		);
+		s.insert(Input(Char('g'), KeyModifiers::CONTROL), A::GoTo);
 
-		s.insert(Input(Char('c'), KeyModifiers::CONTROL), Quit);
-		s.insert(Input(Char('s'), KeyModifiers::CONTROL), Write);
-		s.insert(Input(Char('r'), KeyModifiers::CONTROL), Read);
-		s.insert(Input(Char('z'), KeyModifiers::CONTROL), Undo);
-		s.insert(Input(Char('y'), KeyModifiers::CONTROL), Redo);
-		s.insert(Input(Backspace, none), Clear);
-		s.insert(Input(Delete, none), Clear);
-		s.insert(Input(F(2), none), Edit);
-		s.insert(Input(Enter, none), Replace);
-		s.insert(Input(F(12), none), ToggleDebug);
-		s.insert(Input(F(1), none), TogglePalette);
+		s.insert(Input(Char('c'), KeyModifiers::CONTROL), A::Quit);
+		s.insert(Input(Char('s'), KeyModifiers::CONTROL), A::Write);
+		s.insert(Input(Char('r'), KeyModifiers::CONTROL), A::Read);
+		s.insert(Input(Char('z'), KeyModifiers::CONTROL), A::Undo);
+		s.insert(Input(Char('y'), KeyModifiers::CONTROL), A::Redo);
+		s.insert(Input(Backspace, none), A::Clear);
+		s.insert(Input(Delete, none), A::Clear);
+		s.insert(Input(F(2), none), A::Edit);
+		s.insert(Input(Enter, none), A::Replace);
+		s.insert(Input(F(12), none), A::ToggleDebug);
+		s.insert(Input(F(1), none), A::TogglePalette);
 
 		let delete = s.create_chord("Delete", &[Input(Char('-'), KeyModifiers::ALT)]);
-		delete.insert(Input(Char('c'), none), DeleteCol);
-		delete.insert(Input(Char('r'), none), DeleteRow);
+		delete.insert(Input(Char('c'), none), A::DeleteCol);
+		delete.insert(Input(Char('r'), none), A::DeleteRow);
 
 		let insert = s.create_chord("Insert", &[Input(Char('+'), KeyModifiers::ALT)]);
-		insert.insert(Input(Char('c'), none), InsertCol);
-		insert.insert(Input(Char('r'), none), InsertRow);
+		insert.insert(Input(Char('c'), none), A::InsertCol);
+		insert.insert(Input(Char('r'), none), A::InsertRow);
 
 		s
 	}
