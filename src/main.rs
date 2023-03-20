@@ -71,44 +71,54 @@ pub struct XY<T> {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct Rect {
-	pub x: u16,
-	pub y: u16,
-	pub width: u16,
-	pub height: u16,
+pub struct Rect<T> {
+	pub x: T,
+	pub y: T,
+	pub width: T,
+	pub height: T,
 }
 
-impl Into<tui::layout::Rect> for Rect {
-	fn into(self) -> tui::layout::Rect {
+impl<T> TryInto<tui::layout::Rect> for Rect<T>
+where
+	T: TryInto<u16>,
+{
+	type Error = T::Error;
+
+	fn try_into(self) -> Result<tui::layout::Rect, Self::Error> {
 		let Self {
 			x,
 			y,
 			width,
 			height,
 		} = self;
-		tui::layout::Rect {
-			x,
-			y,
-			width,
-			height,
-		}
+		Ok(tui::layout::Rect {
+			x: x.try_into()?,
+			y: y.try_into()?,
+			width: width.try_into()?,
+			height: height.try_into()?,
+		})
 	}
 }
 
-impl From<tui::layout::Rect> for Rect {
-	fn from(value: tui::layout::Rect) -> Self {
+impl<T> TryFrom<tui::layout::Rect> for Rect<T>
+where
+	T: TryFrom<u16>,
+{
+	type Error = T::Error;
+
+	fn try_from(value: tui::layout::Rect) -> Result<Self, Self::Error> {
 		let tui::layout::Rect {
 			x,
 			y,
 			width,
 			height,
 		} = value;
-		Self {
-			x,
-			y,
-			width,
-			height,
-		}
+		Ok(Self {
+			x: x.try_into()?,
+			y: y.try_into()?,
+			width: width.try_into()?,
+			height: height.try_into()?,
+		})
 	}
 }
 

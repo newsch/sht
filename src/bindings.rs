@@ -69,35 +69,30 @@ where
 impl Default for Bindings<Action> {
 	fn default() -> Self {
 		use Action as A;
+		use Direction as D;
 		use KeyCode::*;
 		let none = KeyModifiers::empty();
 
 		let mut s = Self::empty();
 
 		// movement
-		s.insert(Input(Up, none), A::Move(Direction::Up));
-		s.insert(Input(Down, none), A::Move(Direction::Down));
-		s.insert(Input(Left, none), A::Move(Direction::Left));
-		s.insert(Input(Right, none), A::Move(Direction::Right));
-		s.insert(Input(Tab, none), A::Move(Direction::Right));
-		s.insert(Input(Char('k'), none), A::Move(Direction::Up));
-		s.insert(Input(Char('j'), none), A::Move(Direction::Down));
-		s.insert(Input(Char('h'), none), A::Move(Direction::Left));
-		s.insert(Input(Char('l'), none), A::Move(Direction::Right));
+		s.insert(Input(Up, none), A::Move(D::Up));
+		s.insert(Input(Down, none), A::Move(D::Down));
+		s.insert(Input(Left, none), A::Move(D::Left));
+		s.insert(Input(Right, none), A::Move(D::Right));
+		s.insert(Input(Tab, none), A::Move(D::Right));
+		s.insert(Input(Char('k'), none), A::Move(D::Up));
+		s.insert(Input(Char('j'), none), A::Move(D::Down));
+		s.insert(Input(Char('h'), none), A::Move(D::Left));
+		s.insert(Input(Char('l'), none), A::Move(D::Right));
 		s.insert(Input(Home, KeyModifiers::CONTROL), A::Home);
 		s.insert(Input(End, KeyModifiers::CONTROL), A::End);
 		s.insert(Input(Home, none), A::HomeRow);
 		s.insert(Input(End, none), A::EndRow);
-		s.insert(Input(PageUp, none), A::Jump(Direction::Up));
-		s.insert(Input(PageDown, none), A::Jump(Direction::Down));
-		s.insert(
-			Input(PageUp, KeyModifiers::CONTROL),
-			A::Jump(Direction::Left),
-		);
-		s.insert(
-			Input(PageDown, KeyModifiers::CONTROL),
-			A::Jump(Direction::Right),
-		);
+		s.insert(Input(PageUp, none), A::Jump(D::Up));
+		s.insert(Input(PageDown, none), A::Jump(D::Down));
+		s.insert(Input(PageUp, KeyModifiers::ALT), A::Jump(D::Left));
+		s.insert(Input(PageDown, KeyModifiers::ALT), A::Jump(D::Right));
 		s.insert(Input(Char('g'), KeyModifiers::CONTROL), A::GoTo);
 
 		s.insert(Input(Char('c'), KeyModifiers::CONTROL), A::Quit);

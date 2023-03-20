@@ -68,7 +68,7 @@ impl<'a> Table<'a> {
 		selected: Option<usize>,
 		offset: usize,
 		max_height: u16,
-	) -> (usize, usize) {
+	) -> (usize, usize, bool) {
 		let row_height = 1; // TODO: proper row heights
 		let mut start = offset;
 		let mut end = offset;
@@ -82,7 +82,7 @@ impl<'a> Table<'a> {
 		}
 
 		let Some(selected) = selected else {
-			return (start, end);
+			return (start, end, height> max_height);
 		};
 
 		while selected >= end {
@@ -102,7 +102,7 @@ impl<'a> Table<'a> {
 			}
 		}
 
-		(start, end)
+		(start, end, height > max_height)
 	}
 
 	fn cell_widths<'s>(&'s self) -> impl Iterator<Item = u16> + 's {
@@ -135,7 +135,7 @@ impl<'a> Table<'a> {
 		selected: Option<usize>,
 		offset: usize,
 		max_width: u16,
-	) -> (usize, usize) {
+	) -> (usize, usize, bool) {
 		let mut start = offset;
 		let mut end = offset;
 		let mut width = 0;
@@ -150,7 +150,7 @@ impl<'a> Table<'a> {
 
 		let Some(selected) = selected else {
 			trace!("No selection; using {:?}", (start, end));
-			return (start, end);
+			return (start, end, width > max_width);
 		};
 
 		// bring selection into view (changing offset)
@@ -191,7 +191,7 @@ impl<'a> Table<'a> {
 		}
 		trace!("Using {:?}", (start, end));
 		assert!(selected >= start && selected < end);
-		(start, end)
+		(start, end, width > max_width)
 	}
 }
 
@@ -199,7 +199,8 @@ impl<'a> Table<'a> {
 pub struct TableState {
 	offset: XY<usize>,
 	selected: Option<XY<usize>>,
-	selected_area: Option<MyRect>,
+	selected_area: Option<MyRect<u16>>,
+	visible_cells: XY<usize>,
 }
 
 impl TableState {
@@ -214,9 +215,22 @@ impl TableState {
 		}
 	}
 
+	pub fn scroll_mut(&mut self) -> &mut XY<usize> {
+		&mut self.offset
+	}
+
+	pub fn scroll(&self) -> XY<usize> {
+		self.offset
+	}
+
 	/// Retrieve the location and area of the selected cell drawn in the last render
 	pub fn selected_area(&self) -> Option<Rect> {
-		self.selected_area.map(Into::into)
+		self.selected_area.map(|a| a.try_into().unwrap())
+	}
+
+	/// The length and width of the fully visible cells (not clipped) drawn in the last render.
+	pub fn visible_cells(&self) -> XY<usize> {
+		self.visible_cells
 	}
 }
 
@@ -242,12 +256,17 @@ impl<'a> StatefulWidget for Table<'a> {
 
 		let mut current_height = 0;
 
-		let (row_start, row_end) =
+		let (row_start, row_end, last_row_clipped) =
 			self.get_row_bounds(state.selected.map(|s| s.y), state.offset.y, area.height);
 		state.offset.y = row_start;
-		let (col_start, col_end) =
+		let (col_start, col_end, last_col_clipped) =
 			self.get_col_bounds(state.selected.map(|s| s.x), state.offset.x, area.width);
 		state.offset.x = col_start;
+
+		state.visible_cells = XY {
+			x: col_end.saturating_sub(col_start + if last_col_clipped { 1 } else { 0 }),
+			y: row_end.saturating_sub(row_start + if last_row_clipped { 1 } else { 0 }),
+		};
 
 		for row_t in row_start..row_end {
 			let row_height = 1; // TODO
@@ -300,7 +319,7 @@ impl<'a> StatefulWidget for Table<'a> {
 					.unwrap_or_default();
 				if is_selected {
 					buf.set_style(cell_area, self.highlight_style);
-					state.selected_area = Some(cell_area.into());
+					state.selected_area = Some(cell_area.try_into().unwrap());
 				}
 				col += width + self.column_spacing;
 			}

@@ -24,7 +24,7 @@ use crate::{
 	views::{
 		DebugView, Dialog, EditState, EditView, GridState, GridView, PaletteState, PaletteView,
 	},
-	XY,
+	Rect as MyRect, XY,
 };
 
 mod action;
@@ -104,6 +104,8 @@ pub struct Program {
 	/// Store chorded keys
 	input_buf: InputBuffer,
 	selection: XY<usize>,
+	/// Stored for movements based on screen size
+	last_visible_grid_cells: XY<usize>,
 	bindings: Bindings<Action>,
 	pub should_redraw: bool,
 	/// Result of latest action to display to user
@@ -136,6 +138,40 @@ impl Program {
 			_ => return,
 		};
 		self.selection = s;
+	}
+
+	fn handle_jump(&mut self, m: Direction) {
+		use Direction::*;
+		let XY { x, y } = self.selection;
+		let XY {
+			x: scroll_x,
+			y: scroll_y,
+		} = self.grid_state.scroll();
+		let XY {
+			x: width,
+			y: height,
+			..
+		} = self.grid_state.visible_cells();
+		match m {
+			Up => {
+				self.selection.y = y.saturating_sub(height);
+				self.grid_state.scroll_mut().y = scroll_y.saturating_sub(height);
+			}
+			Down => {
+				self.selection.y = y + height;
+				self.grid_state.scroll_mut().y += height;
+			}
+			Left => {
+				// TODO: these don't take into account the width of the next columns.
+				// Better method would be using the width iterator in GridView and filling the next screen...
+				self.selection.x = x.saturating_sub(width);
+				self.grid_state.scroll_mut().x = scroll_x.saturating_sub(width);
+			}
+			Right => {
+				self.selection.x = x + width;
+				self.grid_state.scroll_mut().x += width;
+			}
+		}
 	}
 
 	pub fn handle_input(&mut self, i: Input) -> io::Result<Option<ExternalAction>> {
@@ -201,7 +237,7 @@ impl Program {
 				self.set_status(Status::Read(self.filename.to_owned(), result));
 			}
 			Move(d) => self.handle_move(d),
-			Jump(d) => todo!(), // store displayed grid size for jumping
+			Jump(d) => self.handle_jump(d),
 			Home => {
 				self.selection = XY { x: 0, y: 0 };
 			}
@@ -377,7 +413,7 @@ impl Program {
 
 			// sheet
 			// TODO: save to keep scrolling behavior
-			self.grid_state.select(self.selection);
+			self.grid_state.select(Some(self.selection));
 			f.render_stateful_widget(GridView::new(&self.grid), size, &mut self.grid_state);
 
 			use ViewState::*;

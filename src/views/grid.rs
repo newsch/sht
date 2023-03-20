@@ -1,28 +1,16 @@
 use std::cmp::max;
 
-use serde::{Deserialize, Serialize};
 use tui::{
 	buffer::Buffer,
 	layout::Rect,
 	widgets::{StatefulWidget, Widget},
 };
 
-use crate::{Grid, XY};
+use crate::Grid;
 
 use super::{Table, TableState};
 
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub struct GridState(TableState);
-
-impl GridState {
-	pub fn select(&mut self, s: XY<usize>) {
-		self.0.select(Some(s));
-	}
-
-	pub fn selected_area(&self) -> Option<Rect> {
-		self.0.selected_area()
-	}
-}
+pub type GridState = TableState;
 
 pub struct GridView<'g> {
 	grid: &'g Grid,
@@ -63,7 +51,7 @@ impl<'g> StatefulWidget for GridView<'g> {
 
 		let table = table.with_widths(&constraints);
 
-		StatefulWidget::render(table, area, buf, &mut state.0);
+		StatefulWidget::render(table, area, buf, state);
 	}
 }
 
