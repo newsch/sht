@@ -447,6 +447,7 @@ impl Program {
 								width,
 								height,
 							};
+							f.render_widget(Clear, bounds);
 							f.render_widget(
 								Paragraph::new(text).block(
 									Block::default()
