@@ -4,6 +4,7 @@ description = "A TUI csv editor"
 version = "0.0.0"
 authors = ["Evan Lloyd New-Schmidt <evan@new-schmidt.com>"]
 edition = "2021"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
